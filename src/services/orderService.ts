@@ -53,6 +53,19 @@ export const confirmDelivery = async (id: string, otp: string): Promise<Order> =
   return data.data;
 };
 
+// Deliver hone tak customer delivery address badal sakta hai — backend fare
+// nayi doori se recalc karke rider ko room me live update bhejta hai.
+export const updateDeliveryAddress = async (id: string, delivery: LocationInfo): Promise<Order> => {
+  const { data } = await apiClient.patch(`/orders/${id}/delivery-address`, delivery);
+  return data.data;
+};
+
+// Delivery ke baad customer rider ko 1-5 star deta hai (ek hi baar).
+export const rateOrder = async (id: string, rating: number, review?: string): Promise<Order> => {
+  const { data } = await apiClient.post(`/orders/${id}/rate`, { rating, review });
+  return data.data;
+};
+
 export const cancelOrder = async (id: string, note?: string): Promise<Order> => {
   const { data } = await apiClient.post(`/orders/${id}/cancel`, { note });
   return data.data;

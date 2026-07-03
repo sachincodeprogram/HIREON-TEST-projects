@@ -1,5 +1,6 @@
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
+const { getMessaging } = require('firebase-admin/messaging');
 
 // Sirf ek baar initialize karo
 if (getApps().length === 0) {
@@ -26,5 +27,5 @@ if (getApps().length === 0) {
   }
 }
 
-// auth() return karo taaki baaki files use kar sakein
-module.exports = { auth: getAuth };
+// auth()/messaging() return karo taaki baaki files use kar sakein
+module.exports = { auth: getAuth, messaging: getMessaging };

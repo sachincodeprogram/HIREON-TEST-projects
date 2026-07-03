@@ -1,6 +1,10 @@
 package com.hireon
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -22,5 +26,24 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
+    createOrderNotificationChannel()
+  }
+
+  // "orders" channel (HIGH importance): naya-order FCM push isi par aata hai —
+  // screen lock/off par bhi heads-up notification sound ke saath dikhta hai.
+  private fun createOrderNotificationChannel() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel(
+        "orders",
+        "Naye Orders",
+        NotificationManager.IMPORTANCE_HIGH
+      ).apply {
+        description = "Naye delivery order requests"
+        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        enableVibration(true)
+      }
+      (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+        .createNotificationChannel(channel)
+    }
   }
 }

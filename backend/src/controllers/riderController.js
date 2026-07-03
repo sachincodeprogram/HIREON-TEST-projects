@@ -41,6 +41,19 @@ const updateLocation = async (req, res) => {
   }
 };
 
+// POST /api/v1/rider/fcm-token — device ka push token save karo taaki screen
+// lock/app background me bhi naya-order notification bheja ja sake.
+const updateFcmToken = async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    if (!fcmToken) return res.status(400).json(error('fcmToken required'));
+    await User.findByIdAndUpdate(req.user._id, { fcmToken });
+    res.json(success('FCM token saved'));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
 // GET /api/v1/rider/earnings
 const getEarnings = async (req, res) => {
   try {
@@ -72,4 +85,4 @@ const getEarnings = async (req, res) => {
   }
 };
 
-module.exports = { setOnlineStatus, updateLocation, getEarnings };
+module.exports = { setOnlineStatus, updateLocation, updateFcmToken, getEarnings };

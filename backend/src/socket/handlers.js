@@ -51,7 +51,10 @@ const registerSocketHandlers = (io) => {
     });
 
     socket.on('disconnect', () => {
-      if (user.role === 'rider') {
+      // Sirf tabhi offline karo jab YEHI socket map me ho — rider ke naye
+      // connection (reconnect) ke baad purane socket ka late disconnect
+      // rider ko galti se offline kar deta tha, phir order ping nahi milte.
+      if (user.role === 'rider' && onlineRiders.get(user._id.toString()) === socket.id) {
         onlineRiders.delete(user._id.toString());
       }
     });

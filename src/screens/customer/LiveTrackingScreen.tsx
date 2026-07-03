@@ -8,10 +8,11 @@ import { COLORS } from '../../constants/api';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { setActiveOrder, setRiderCoords } from '../../store/slices/orderSlice';
 import { connectSocket, trackOrder, getSocket } from '../../services/socketService';
-import { getOrderById, cancelOrder, getNearbyRiders, redispatchOrder } from '../../services/orderService';
+import { getOrderById, cancelOrder, getNearbyRiders, redispatchOrder, updateDeliveryAddress, rateOrder } from '../../services/orderService';
 import { fetchRoute } from '../../services/routeService';
 import StatusBadge from '../../components/common/StatusBadge';
 import Button      from '../../components/common/Button';
+import AddressSearchInput from '../../components/common/AddressSearchInput';
 import { Order, Coordinates, UserProfile } from '../../types';
 import { formatCurrency, truncateAddress } from '../../utils/formatters';
 
@@ -36,6 +37,47 @@ const LiveRiderMarker = () => {
     <View style={styles.riderMarkerWrap}>
       <Animated.View style={[styles.riderPulse, { transform: [{ scale }], opacity }]} />
       <View style={styles.riderMarker}><Text style={{ fontSize: 18 }}>🏍️</Text></View>
+    </View>
+  );
+};
+
+// Play Store download jaisi "snake" wave bar — asli progress halki tint me
+// peeche dikhta hai, aur ek solid patti track par lagataar left→right behti
+// rehti hai (native driver, seamless loop — kabhi rukti nahi).
+const SearchWaveBar = ({ progress }: { progress: Animated.Value }) => {
+  const [trackW, setTrackW] = useState(0);
+  const wave = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (trackW <= 0) return;
+    const loop = Animated.loop(
+      Animated.timing(wave, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [trackW]);
+
+  const fillWidth  = progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  const snakeW     = Math.max(46, trackW * 0.35);
+  // Snake track ke bahar se enter/exit karti hai taaki loop seamless lage.
+  const translateX = wave.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-snakeW * 1.4, trackW + snakeW * 0.4],
+  });
+
+  return (
+    <View style={styles.searchBarTrack} onLayout={e => setTrackW(e.nativeEvent.layout.width)}>
+      <Animated.View style={[styles.searchBarFill, { width: fillWidth }]} />
+      {trackW > 0 && (
+        <Animated.View
+          style={[styles.searchWave, { width: snakeW, transform: [{ translateX }, { skewX: '-18deg' }] }]}
+        />
+      )}
     </View>
   );
 };
@@ -67,6 +109,14 @@ const LiveTrackingScreen = () => {
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const lastRouteOrigin = useRef<Coordinates | null>(null);
   const lastRouteTarget = useRef<Coordinates | null>(null);
+
+  // Deliver hone tak customer delivery address badal sakta hai (fare recalc hota hai)
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [savingAddress,  setSavingAddress]  = useState(false);
+
+  // Delivery ke baad rider ko 1-5 star rating (ek hi baar)
+  const [pendingStars,     setPendingStars]     = useState(0);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   // Rider search (order pending hone tak): 5km ke andar online riders + progress bar
   const [nearbyRiders, setNearbyRiders] = useState<Coordinates[]>([]);
@@ -114,6 +164,25 @@ const LiveTrackingScreen = () => {
     };
   }, [orderId]);
 
+  // Order load hote hi (rider ki location aane se pehle bhi) map ko
+  // pickup + delivery par fit karo — pehle default Delhi par atka rehta tha.
+  const hasRiderFix = !!riderPos;
+  useEffect(() => {
+    if (!order || riderPos) return;
+    const pts = [order.pickup.coordinates, order.delivery.coordinates]
+      .filter(Boolean)
+      .map(c => ({ latitude: c.lat, longitude: c.lng }));
+    if (pts.length === 0) return;
+    // Map mount/layout hone ka thoda wait — warna fitToCoordinates ignore ho jaata hai.
+    const t = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(pts, {
+        edgePadding: { top: 110, right: 60, bottom: 340, left: 60 },
+        animated: true,
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [order?._id, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng, hasRiderFix]);
+
   // Draw the live road route rider → current target (pickup before pickup,
   // delivery after) as a blue Polyline + distance/ETA. Uses the shared
   // routeService (Google Routes → OSRM fallback) so it works even though the
@@ -139,28 +208,30 @@ const LiveTrackingScreen = () => {
     (async () => {
       const r = await fetchRoute(riderPos, target);
       if (cancelled) return;
-      if (r?.coords?.length) {
-        setRouteCoords(r.coords);
+      const coords = r?.coords?.length ? r.coords : [
+        { latitude: riderPos.lat, longitude: riderPos.lng },
+        { latitude: target.lat,   longitude: target.lng },
+      ];
+      setRouteCoords(coords);
+      if (r) {
         setRouteDistance(r.distance / 1000); // metres → km
         setRouteDuration(r.duration / 60);    // seconds → min
-        mapRef.current?.fitToCoordinates(r.coords, {
-          edgePadding: { top: 110, right: 50, bottom: 340, left: 50 },
-          animated: true,
-        });
-      } else {
-        const straight = [
-          { latitude: riderPos.lat, longitude: riderPos.lng },
-          { latitude: target.lat,   longitude: target.lng },
-        ];
-        setRouteCoords(straight);
-        mapRef.current?.fitToCoordinates(straight, {
-          edgePadding: { top: 110, right: 50, bottom: 340, left: 50 },
-          animated: true,
-        });
       }
+      // Professional follow-cam: naya target ho to poora route frame karo;
+      // uske baad har move par sirf rider + target — camera rider ke saath
+      // smoothly andar zoom hota jaata hai jaise-jaise rider paas aata hai.
+      const fitPts = targetChanged ? coords : [
+        { latitude: riderPos.lat, longitude: riderPos.lng },
+        { latitude: target.lat,   longitude: target.lng },
+      ];
+      mapRef.current?.fitToCoordinates(fitPts, {
+        edgePadding: { top: 110, right: 50, bottom: 340, left: 50 },
+        animated: true,
+      });
     })();
     return () => { cancelled = true; };
-  }, [riderPos?.lat, riderPos?.lng, order?.status]);
+    // delivery coords bhi deps me — address edit hote hi route naya target dikhaye
+  }, [riderPos?.lat, riderPos?.lng, order?.status, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng]);
 
   // Pehli baar pending order aaye to search ki shuruaat order ke createdAt se maano.
   useEffect(() => {
@@ -190,7 +261,13 @@ const LiveTrackingScreen = () => {
     };
     load();
     const poll = setInterval(load, 8000);
-    return () => { active = false; anim.stop(); clearInterval(poll); };
+
+    // Timeline khatam (4:30) — backend ka 'order_no_rider' event miss bhi ho
+    // jaye to customer ko message zaroor dikhe (3s grace event ke liye; order
+    // accept hote hi `searching` false → cleanup yeh timer clear kar deta hai).
+    const doneTimer = setTimeout(() => { if (active) setNoRider(true); }, remaining + 3000);
+
+    return () => { active = false; anim.stop(); clearInterval(poll); clearTimeout(doneTimer); };
   }, [searching, searchStart, orderId]);
 
   // "Order Again" — same order dobara dispatch + fresh 4:30 search.
@@ -205,6 +282,55 @@ const LiveTrackingScreen = () => {
       Alert.alert('Error', e.message);
     } finally {
       setRetrying(false);
+    }
+  };
+
+  // Naya delivery address pin-confirm hua — backend par save karo. Fare nayi
+  // doori se recalc hota hai; diff customer ko alert me dikhate hain.
+  const handleDeliveryEdited = async (address: string, coords: Coordinates) => {
+    if (!order) return;
+    try {
+      setSavingAddress(true);
+      const oldFare  = order.fare.estimated;
+      const updated  = await updateDeliveryAddress(orderId, {
+        address,
+        coordinates: coords,
+        contactName:  order.delivery.contactName,
+        contactPhone: order.delivery.contactPhone,
+      });
+      setOrder(updated);
+      dispatch(setActiveOrder(updated));
+      setEditingAddress(false);
+      const diff = updated.fare.estimated - oldFare;
+      Alert.alert(
+        'Delivery Address Badal Gaya ✅',
+        `Naya fare: ${formatCurrency(updated.fare.estimated)}` +
+          (diff > 0
+            ? ` (+${formatCurrency(diff)} doori badhne se add hua)`
+            : diff < 0
+              ? ` (${formatCurrency(diff)} doori kam hone se ghata)`
+              : ' (fare me koi badlav nahi)') +
+          '\nRider ko naya address bhej diya gaya hai.',
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  // Customer ne stars chun ke submit kiya — backend rider ka aggregate update
+  // karke rider ko live batata hai.
+  const handleRate = async () => {
+    if (!order || pendingStars === 0) return;
+    try {
+      setRatingSubmitting(true);
+      const updated = await rateOrder(orderId, pendingStars);
+      setOrder(updated);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setRatingSubmitting(false);
     }
   };
 
@@ -256,6 +382,8 @@ const LiveTrackingScreen = () => {
     : null;
   // Live delivery progress (stepper) + assigned rider details for the info card.
   const cancelled = order?.status === 'cancelled';
+  // Deliver/cancel hone tak hi address edit ho sakta hai.
+  const canEditDelivery = !!order && ['pending', 'accepted', 'picked_up', 'in_transit'].includes(order.status);
   const stepIndex = (() => {
     switch (order?.status) {
       case 'accepted':   return 1;
@@ -271,8 +399,6 @@ const LiveTrackingScreen = () => {
 
   const formatDuration = (min: number) =>
     min < 60 ? `${Math.round(min)} min` : `${Math.floor(min / 60)}h ${Math.round(min % 60)}min`;
-
-  const progressWidth = searchProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
   return (
     <View style={styles.container}>
@@ -388,9 +514,7 @@ const LiveTrackingScreen = () => {
                     ? `${nearbyRiders.length} rider aas-paas (5km) — request bheji ja rahi hai`
                     : 'Aas-paas ke riders ko request bheji ja rahi hai'}
                 </Text>
-                <View style={styles.searchBarTrack}>
-                  <Animated.View style={[styles.searchBarFill, { width: progressWidth }]} />
-                </View>
+                <SearchWaveBar progress={searchProgress} />
               </View>
             )}
 
@@ -398,9 +522,10 @@ const LiveTrackingScreen = () => {
             {noRider && (
               <View style={styles.noRiderCard}>
                 <Text style={styles.noRiderIcon}>😕</Text>
-                <Text style={styles.noRiderTitle}>Koi rider uplabdh nahi hai</Text>
+                <Text style={styles.noRiderTitle}>Abhi koi rider nahi mil paya</Text>
                 <Text style={styles.noRiderSub}>
-                  Abhi aas-paas koi rider free nahi mila. Thodi der me dobara try karein.
+                  Aas-paas ke sabhi riders abhi busy lag rahe hain. "Order Again" dabayein —
+                  hum dobara riders dhoondhna shuru kar denge. Aapka order safe hai.
                 </Text>
                 <Button
                   title="Order Again"
@@ -451,6 +576,15 @@ const LiveTrackingScreen = () => {
                 <Text style={styles.routeText} numberOfLines={1}>
                   {truncateAddress(order.delivery.address)}
                 </Text>
+                {canEditDelivery && (
+                  <TouchableOpacity
+                    style={styles.editAddrBtn}
+                    onPress={() => setEditingAddress(true)}
+                    activeOpacity={0.8}>
+                    <Text style={styles.editAddrIcon}>✏️</Text>
+                    <Text style={styles.editAddrText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -477,6 +611,55 @@ const LiveTrackingScreen = () => {
               </View>
             )}
 
+            {/* Delivery ke baad rider ki rating — ek baar; submit ke baad thanks card */}
+            {order.status === 'delivered' && (
+              order.rating ? (
+                <View style={styles.ratingCard}>
+                  <Text style={styles.ratingTitle}>Aapki Rating</Text>
+                  <View style={styles.starRow}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <Text
+                        key={i}
+                        style={[styles.star, i <= (order.rating || 0) ? styles.starOn : styles.starOff]}>
+                        ★
+                      </Text>
+                    ))}
+                  </View>
+                  <Text style={styles.ratingThanks}>
+                    Shukriya! Aapka feedback rider tak pahunch gaya 🙏
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.ratingCard}>
+                  <Text style={styles.ratingTitle}>
+                    {rider?.name ? `${rider.name} ki service kaisi rahi?` : 'Rider ki service kaisi rahi?'}
+                  </Text>
+                  <View style={styles.starRow}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <TouchableOpacity key={i} onPress={() => setPendingStars(i)} activeOpacity={0.7}>
+                        <Text style={[styles.star, i <= pendingStars ? styles.starOn : styles.starOff]}>
+                          ★
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {pendingStars > 0 && (
+                    <Text style={styles.ratingHint}>
+                      {['', 'Bahut kharab 😞', 'Kharab 😕', 'Theek-thaak 🙂', 'Achha 😊', 'Shaandar! 🤩'][pendingStars]}
+                    </Text>
+                  )}
+                  <Button
+                    title="Rating Submit Karo"
+                    icon="⭐"
+                    onPress={handleRate}
+                    loading={ratingSubmitting}
+                    disabled={pendingStars === 0}
+                    style={{ marginTop: 10 }}
+                  />
+                </View>
+              )
+            )}
+
             {['pending', 'accepted'].includes(order.status) && (
               <Button
                 title="Cancel Order"
@@ -493,6 +676,47 @@ const LiveTrackingScreen = () => {
           </View>
         )}
       </SafeAreaView>
+
+      {/* Delivery address edit overlay — deliver hone tak customer kabhi bhi
+          naya address chun sakta hai (search / typed / GPS → pin-confirm). */}
+      {editingAddress && order && (
+        <View style={styles.editOverlay}>
+          <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+            <View style={styles.editHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.editTitle}>Delivery Address Badlo</Text>
+                <Text style={styles.editSub}>
+                  Naya address pin karo — fare nayi doori ke hisaab se adjust hoga
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editClose}
+                onPress={() => setEditingAddress(false)}
+                activeOpacity={0.7}>
+                <Text style={styles.editCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.editBody}>
+              <AddressSearchInput
+                label="Naya Delivery Address"
+                placeholder="Search new delivery address"
+                leftIcon="🏁"
+                biasCoords={order.delivery.coordinates}
+                onSelect={handleDeliveryEdited}
+              />
+              {savingAddress && (
+                <Text style={styles.editSaving}>Naya address save ho raha hai…</Text>
+              )}
+              <View style={styles.editNote}>
+                <Text style={styles.editNoteText}>
+                  💡 Doori badhegi to fare badhega, kam hogi to fare bhi kam ho
+                  jayega. Rider ko naya address turant mil jayega.
+                </Text>
+              </View>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
     </View>
   );
 };
@@ -547,7 +771,12 @@ const styles = StyleSheet.create({
   searchBarTrack: {
     height: 8, borderRadius: 4, backgroundColor: COLORS.primary + '22', overflow: 'hidden',
   },
-  searchBarFill: { height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  // Asli progress — halki tint, taaki upar behti solid snake alag dikhe
+  searchBarFill: { height: 8, borderRadius: 4, backgroundColor: COLORS.primary + '55' },
+  searchWave: {
+    position: 'absolute', top: 0, bottom: 0, left: 0,
+    borderRadius: 4, backgroundColor: COLORS.primary,
+  },
 
   // No rider state
   noRiderCard: {
@@ -664,12 +893,63 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.successBg, borderRadius: 14, padding: 20,
     alignItems: 'center', marginBottom: 10,
   },
+
+  // Delivery ke baad rating card
+  ratingCard: {
+    backgroundColor: COLORS.surface2, borderRadius: 14, padding: 16, marginBottom: 12,
+    alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
+  },
+  ratingTitle:  { fontSize: 15, fontWeight: '800', color: COLORS.text, marginBottom: 10, textAlign: 'center' },
+  starRow:      { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  star:         { fontSize: 36, lineHeight: 40 },
+  starOn:       { color: '#F5A623' },
+  starOff:      { color: COLORS.border },
+  ratingHint:   { fontSize: 13, fontWeight: '700', color: COLORS.textMuted, marginTop: 2 },
+  ratingThanks: { fontSize: 12.5, fontWeight: '600', color: COLORS.success, marginTop: 4, textAlign: 'center' },
   deliveredIcon:  { fontSize: 32, marginBottom: 8 },
   deliveredTitle: { fontSize: 17, fontWeight: '800', color: COLORS.success, marginBottom: 4 },
   deliveredSub:   { fontSize: 13, color: COLORS.success + 'AA' },
 
   loadingWrap: { padding: 24, alignItems: 'center' },
   loadingText: { fontSize: 14, color: COLORS.textMuted },
+
+  // Delivery address edit
+  editAddrBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+    backgroundColor: COLORS.primaryBg,
+    borderWidth: 1, borderColor: COLORS.primary + '44',
+  },
+  editAddrIcon: { fontSize: 11 },
+  editAddrText: { fontSize: 11.5, fontWeight: '800', color: COLORS.primary },
+
+  editOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: COLORS.background,
+    zIndex: 50, elevation: 20,
+  },
+  editHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  editTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  editSub:   { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  editClose: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  editCloseText: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  editBody:   { padding: 16 },
+  editSaving: { fontSize: 12.5, fontWeight: '600', color: COLORS.textMuted, marginTop: 8 },
+  editNote: {
+    backgroundColor: COLORS.warningBg, borderRadius: 12, padding: 12, marginTop: 14,
+    borderLeftWidth: 3, borderLeftColor: COLORS.warning,
+  },
+  editNoteText: { fontSize: 12, color: COLORS.warning, lineHeight: 17 },
 });
 
 export default LiveTrackingScreen;

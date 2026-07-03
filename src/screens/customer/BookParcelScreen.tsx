@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Switch, Alert,
   KeyboardAvoidingView, Platform, Pressable, PermissionsAndroid,
@@ -16,6 +16,7 @@ import Card           from '../../components/common/Card';
 import ScreenHeader   from '../../components/navigation/ScreenHeader';
 import AddressSearchInput from '../../components/common/AddressSearchInput';
 import { estimateFare }   from '../../services/orderService';
+import { getQuickPosition } from '../../services/locationService';
 import { selectContactPhone } from 'react-native-select-contact';
 
 const SIZES: { value: ParcelSize; label: string; desc: string; icon: string }[] = [
@@ -25,8 +26,6 @@ const SIZES: { value: ParcelSize; label: string; desc: string; icon: string }[] 
 ];
 
 const WEIGHT_PRESETS = [0.5, 1, 2, 5, 10];
-
-const DEFAULT_COORDS: Coordinates = { lat: 28.6139, lng: 77.2090 };
 
 // Premium section header: colored icon chip + title + Hinglish hint.
 const SectionHead: React.FC<{ icon: string; color: string; title: string; sub: string; step: number }> =
@@ -48,15 +47,24 @@ const SectionHead: React.FC<{ icon: string; color: string; title: string; sub: s
 const BookParcelScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
 
+  // Coords sirf map pin-confirm ke baad set hote hain — koi default nahi,
+  // warna galat (purani/Delhi) location par order chala jaata hai.
   const [pickupAddress,    setPickupAddress]    = useState('');
-  const [pickupCoords,     setPickupCoords]     = useState<Coordinates>(DEFAULT_COORDS);
+  const [pickupCoords,     setPickupCoords]     = useState<Coordinates | null>(null);
   const [pickupContact,    setPickupContact]    = useState('');
   const [pickupPhone,      setPickupPhone]      = useState('');
 
   const [deliveryAddress,  setDeliveryAddress]  = useState('');
-  const [deliveryCoords,   setDeliveryCoords]   = useState<Coordinates>(DEFAULT_COORDS);
+  const [deliveryCoords,   setDeliveryCoords]   = useState<Coordinates | null>(null);
   const [deliveryContact,  setDeliveryContact]  = useState('');
   const [deliveryPhone,    setDeliveryPhone]    = useState('');
+
+  // Search suggestions ko user ke area ki taraf bias karne ke liye (silent,
+  // koi permission prompt nahi).
+  const [searchBias, setSearchBias] = useState<Coordinates | null>(null);
+  useEffect(() => {
+    getQuickPosition().then(setSearchBias).catch(() => {});
+  }, []);
 
   const [description,      setDescription]      = useState('');
   const [weight,           setWeight]           = useState('1');
@@ -72,6 +80,16 @@ const BookParcelScreen = () => {
   const handleDeliverySelect = (address: string, coords: Coordinates) => {
     setDeliveryAddress(address);
     setDeliveryCoords(coords);
+  };
+
+  // User ne address text badla (naya search) — purane coords ab galat hain.
+  // Dobara pin-confirm hone tak estimate aage nahi badhega. Same text (jaise
+  // paste) par confirmed pin mat udao — sirf sach me badla ho tab invalidate.
+  const handlePickupTextChange = (text: string) => {
+    if (text !== pickupAddress) setPickupCoords(null);
+  };
+  const handleDeliveryTextChange = (text: string) => {
+    if (text !== deliveryAddress) setDeliveryCoords(null);
   };
 
   // Phone contacts se number uthao (manual entry ka option waise hi rehta hai).
@@ -110,8 +128,17 @@ const BookParcelScreen = () => {
   };
 
   const handleEstimate = async () => {
-    if (!pickupAddress.trim() || !deliveryAddress.trim()) {
-      return Alert.alert('Missing Address', 'Please select pickup and delivery addresses.');
+    if (!pickupAddress.trim() || !pickupCoords) {
+      return Alert.alert(
+        'Pickup Location Set Karo',
+        'Pickup address chuno aur map par exact location pin karo.',
+      );
+    }
+    if (!deliveryAddress.trim() || !deliveryCoords) {
+      return Alert.alert(
+        'Delivery Location Set Karo',
+        'Delivery address chuno aur map par exact location pin karo.',
+      );
     }
     try {
       setLoading(true);
@@ -163,7 +190,9 @@ const BookParcelScreen = () => {
                 placeholder="Search pickup address"
                 leftIcon="📍"
                 showCurrentLocation
+                biasCoords={searchBias}
                 onSelect={handlePickupSelect}
+                onTextChange={handlePickupTextChange}
               />
               <Input
                 label="Contact Name"
@@ -193,7 +222,9 @@ const BookParcelScreen = () => {
                 label="Address"
                 placeholder="Search delivery address"
                 leftIcon="🏁"
+                biasCoords={pickupCoords || searchBias}
                 onSelect={handleDeliverySelect}
+                onTextChange={handleDeliveryTextChange}
               />
               <Input
                 label="Contact Name"

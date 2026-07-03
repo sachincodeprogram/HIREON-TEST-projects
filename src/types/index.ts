@@ -73,6 +73,9 @@ export interface Order {
   deliveryOtp?: string;
   timeline: TimelineItem[];
   riderEarning: number;
+  /** Customer ki 1-5 star rating (delivery ke baad); 0/undefined = abhi nahi di */
+  rating?: number;
+  review?: string;
   createdAt: string;
   updatedAt: string;
 }

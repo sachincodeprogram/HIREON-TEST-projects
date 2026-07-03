@@ -51,6 +51,12 @@ const orderSchema = new mongoose.Schema({
 
   timeline:    [timelineSchema],
 
+  // Customer ki rating (delivery ke baad, ek hi baar) — rider ke aggregate me
+  // jaati hai. 0 = abhi nahi di; 1-5 ki validation controller me hai (schema
+  // me min:1 rakhne se default 0 par hi order create fail ho jaata tha).
+  rating:  { type: Number, default: 0 },
+  review:  { type: String, default: '' },
+
   cancelledBy:     { type: String, enum: ['customer', 'rider', 'admin', ''], default: '' },
   cancellationNote: { type: String, default: '' },
   riderEarning:    { type: Number, default: 0 },

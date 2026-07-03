@@ -1,7 +1,7 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
@@ -26,12 +26,16 @@ const OrderHistoryScreen = () => {
     finally { dispatch(setOrderLoading(false)); }
   }, []);
 
-  useEffect(() => { loadOrders(); }, []);
+  // Focus par fresh list — tracking/rating se wapas aane par status aur
+  // rating turant updated dikhe (pehle sirf mount par load hota tha).
+  useFocusEffect(useCallback(() => { loadOrders(); }, [loadOrders]));
 
   const renderItem = ({ item }: { item: Order }) => (
     <TouchableOpacity
+      // Delivered orders bhi khulte hain — wahan rating card hai (pending
+      // me rider-search screen). Sirf cancelled ke liye kholne ko kuch nahi.
       onPress={() =>
-        ['accepted', 'picked_up', 'in_transit'].includes(item.status)
+        item.status !== 'cancelled'
           ? navigation.navigate('LiveTracking', { orderId: item._id })
           : null
       }
@@ -62,6 +66,11 @@ const OrderHistoryScreen = () => {
           <Text style={styles.distance}>{formatDistance(item.fare.distance)}</Text>
           {['accepted', 'picked_up', 'in_transit'].includes(item.status) && (
             <Text style={styles.trackBtn}>Track →</Text>
+          )}
+          {item.status === 'delivered' && (
+            item.rating
+              ? <Text style={styles.ratedText}>{'★'.repeat(item.rating)} {item.rating}.0</Text>
+              : <Text style={styles.trackBtn}>Rate karo ⭐</Text>
           )}
         </View>
       </View>
@@ -128,7 +137,8 @@ const styles = StyleSheet.create({
   },
   fare:     { fontSize: 16, fontWeight: '800', color: COLORS.primary, flex: 1 },
   distance: { fontSize: 12, color: COLORS.textMuted },
-  trackBtn: { fontSize: 13, fontWeight: '700', color: COLORS.secondary },
+  trackBtn:  { fontSize: 13, fontWeight: '700', color: COLORS.secondary },
+  ratedText: { fontSize: 13, fontWeight: '800', color: '#F5A623' },
 
   emptyState:    { alignItems: 'center', paddingVertical: 60 },
   emptyIcon:     { fontSize: 52, marginBottom: 14 },

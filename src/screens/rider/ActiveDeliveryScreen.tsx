@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Alert, TextInput, Animated, TouchableOpacity, Linking,
+  View, Text, StyleSheet, ScrollView, Alert, TextInput, Animated, TouchableOpacity, Linking, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
@@ -37,6 +37,55 @@ const distanceMeters = (a: Coordinates, b: Coordinates) => {
   return 2 * R * Math.asin(Math.sqrt(h));
 };
 
+// 4 alag digit-boxes wala OTP input — har dala hua digit bade size me saaf
+// dikhta hai (pehle single TextInput tha jisme letterSpacing ke kaaran Android
+// par digits clip ho jaate the). Peeche ek invisible TextInput input capture
+// karta hai; boxes par tap karte hi keyboard khul jaata hai.
+const OtpBoxes = ({
+  value, onChange, color, disabled, onFocus,
+}: {
+  value: string; onChange: (v: string) => void; color: string; disabled: boolean;
+  /** Keyboard khulne par parent screen ko scroll karne ka mauka — warna boxes
+   *  keyboard ke peeche chhup jaate hain aur rider ko typed digits nahi dikhte. */
+  onFocus?: () => void;
+}) => {
+  const inputRef = useRef<TextInput>(null);
+  return (
+    <Pressable
+      style={styles.otpBoxWrap}
+      disabled={disabled}
+      onPress={() => inputRef.current?.focus()}>
+      <View style={styles.otpBoxRow} pointerEvents="none">
+        {[0, 1, 2, 3].map(i => (
+          <View
+            key={i}
+            style={[
+              styles.otpBox,
+              { borderColor: disabled ? COLORS.border : color },
+              !disabled && value.length === i && styles.otpBoxActive,
+              disabled && styles.otpBoxDisabled,
+            ]}>
+            <Text style={[styles.otpBoxDigit, { color: disabled ? COLORS.textLight : COLORS.text }]}>
+              {value[i] ?? ''}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <TextInput
+        ref={inputRef}
+        style={styles.otpHiddenInput}
+        value={value}
+        onChangeText={t => onChange(t.replace(/[^0-9]/g, '').slice(0, 4))}
+        onFocus={onFocus}
+        keyboardType="number-pad"
+        maxLength={4}
+        editable={!disabled}
+        caretHidden
+      />
+    </Pressable>
+  );
+};
+
 const ActiveDeliveryScreen = () => {
   const route      = useRoute<Route>();
   const navigation = useNavigation();
@@ -44,6 +93,7 @@ const ActiveDeliveryScreen = () => {
   const { orderId } = route.params;
 
   const mapRef              = useRef<MapView>(null);
+  const scrollRef           = useRef<ScrollView>(null);
   const bannerAnim          = useRef(new Animated.Value(0)).current;
   const [order,   setOrder]  = useState<Order | null>(null);
   const [otp,     setOtp]    = useState('');
@@ -56,6 +106,12 @@ const ActiveDeliveryScreen = () => {
   const locationWatchId = useRef<number | null>(null);
   const lastRouteOrigin = useRef<Coordinates | null>(null);
   const lastRouteTarget = useRef<Coordinates | null>(null);
+
+  // OTP par focus hote hi sheet ko neeche tak scroll karo — warna keyboard
+  // boxes ko dhak deta hai aur rider ko typed digits nahi dikhte.
+  const scrollOtpIntoView = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
+  };
 
   // Animate pickup→delivery transition banner
   const showTransitionBanner = () => {
@@ -77,8 +133,17 @@ const ActiveDeliveryScreen = () => {
 
       const socket = await connectSocket();
       joinOrderRoom(orderId);
-      socket.on('order_update', ({ status }: { status: Order['status'] }) => {
-        if (mounted) setOrder(prev => prev ? { ...prev, status } : prev);
+      socket.on('order_update', (update: Partial<Order> & { status: Order['status']; addressChanged?: boolean }) => {
+        if (!mounted) return;
+        // Customer delivery address badal sakta hai — delivery/fare bhi merge karo
+        // taaki naya target + naya earning turant dikhe.
+        setOrder(prev => prev ? { ...prev, ...update } : prev);
+        if (update.addressChanged) {
+          Alert.alert(
+            '📍 Delivery Address Badla',
+            'Customer ne delivery ka address update kiya hai. Naya route aur fare map par dikh raha hai.',
+          );
+        }
       });
 
       // Request location permission before starting GPS
@@ -137,7 +202,7 @@ const ActiveDeliveryScreen = () => {
         longitudeDelta: 0.02,
       }, 600);
     }
-  }, [order?._id, order?.status, riderPos]);
+  }, [order?._id, order?.status, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng, riderPos]);
 
   // Fetch a road-following route (rider → current target) and draw it as a blue
   // Polyline. Uses the shared routeService (Google Directions → OSRM fallback),
@@ -187,7 +252,8 @@ const ActiveDeliveryScreen = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [riderPos?.lat, riderPos?.lng, order?.status]);
+    // delivery coords bhi deps me — customer address badle to route turant redraw ho
+  }, [riderPos?.lat, riderPos?.lng, order?.status, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng]);
 
   const handlePickupConfirm = async () => {
     if (!withinRange) {
@@ -377,7 +443,11 @@ const ActiveDeliveryScreen = () => {
         </Animated.View>
       )}
 
-      <ScrollView style={styles.sheet} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.sheet}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         {order && (
           <>
             {/* Order header */}
@@ -477,17 +547,7 @@ const ActiveDeliveryScreen = () => {
                     {rangeMsg.text}
                   </Text>
                 </View>
-                <TextInput
-                  style={[styles.otpInput, { borderColor: COLORS.success }, !withinRange && styles.otpInputDisabled]}
-                  value={otp}
-                  onChangeText={setOtp}
-                  placeholder="_ _ _ _"
-                  placeholderTextColor={COLORS.textLight}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  textAlign="center"
-                  editable={withinRange}
-                />
+                <OtpBoxes value={otp} onChange={setOtp} color={COLORS.success} disabled={!withinRange} onFocus={scrollOtpIntoView} />
                 <Button
                   title={withinRange ? 'Pickup Confirm Karo' : 'Pickup Ke Paas Jao'}
                   onPress={handlePickupConfirm}
@@ -514,17 +574,7 @@ const ActiveDeliveryScreen = () => {
                     {rangeMsg.text}
                   </Text>
                 </View>
-                <TextInput
-                  style={[styles.otpInput, { borderColor: COLORS.primary }, !withinRange && styles.otpInputDisabled]}
-                  value={otp}
-                  onChangeText={setOtp}
-                  placeholder="_ _ _ _"
-                  placeholderTextColor={COLORS.textLight}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  textAlign="center"
-                  editable={withinRange}
-                />
+                <OtpBoxes value={otp} onChange={setOtp} color={COLORS.primary} disabled={!withinRange} onFocus={scrollOtpIntoView} />
                 <Button
                   title={withinRange ? 'Delivery Confirm Karo' : 'Delivery Ke Paas Jao'}
                   onPress={handleDeliveryConfirm}
@@ -546,6 +596,18 @@ const ActiveDeliveryScreen = () => {
                   <Text style={styles.doneEarningLabel}>Total Kamai</Text>
                   <Text style={styles.doneEarningValue}>{formatCurrency(order.riderEarning)}</Text>
                 </View>
+                {/* Customer rating dete hi socket order_update se yahan live aa jaati hai */}
+                {order.rating ? (
+                  <View style={styles.doneRating}>
+                    <Text style={styles.doneRatingStars}>
+                      {'★'.repeat(order.rating)}
+                      <Text style={styles.doneRatingStarsOff}>{'★'.repeat(5 - order.rating)}</Text>
+                    </Text>
+                    <Text style={styles.doneRatingText}>Customer ne {order.rating}★ rating di 🙏</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.doneRatingWait}>Customer ki rating ka intezaar…</Text>
+                )}
                 <Button
                   title="Dashboard Pe Jao"
                   onPress={() => navigation.goBack()}
@@ -671,13 +733,26 @@ const styles = StyleSheet.create({
   otpIcon:   { fontSize: 28 },
   otpTitle:  { fontSize: 16, fontWeight: '800', color: COLORS.text },
   otpHint:   { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
-  otpInput: {
-    borderWidth: 2, borderRadius: 14,
-    fontSize: 36, fontWeight: '900', paddingVertical: 14,
-    letterSpacing: 16, color: COLORS.text, marginBottom: 4,
+  // OTP digit boxes — har digit apne box me, hamesha saaf dikhta hai.
+  otpBoxWrap: { marginBottom: 8 },
+  otpBoxRow:  { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  otpBox: {
+    width: 58, height: 64, borderRadius: 14, borderWidth: 2,
     backgroundColor: COLORS.surface2,
+    alignItems: 'center', justifyContent: 'center',
   },
-  otpInputDisabled: { opacity: 0.4, borderColor: COLORS.border },
+  otpBoxActive: {
+    backgroundColor: COLORS.surface,
+    transform: [{ scale: 1.05 }],
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12, shadowRadius: 3,
+  },
+  otpBoxDisabled: { opacity: 0.45 },
+  otpBoxDigit:    { fontSize: 30, fontWeight: '900' },
+  otpHiddenInput: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    opacity: 0.02, color: 'transparent', fontSize: 1,
+  },
 
   rangeBanner: {
     borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginBottom: 12,
@@ -702,6 +777,11 @@ const styles = StyleSheet.create({
   },
   doneEarningLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600', marginBottom: 4 },
   doneEarningValue: { fontSize: 36, fontWeight: '900', color: COLORS.success },
+  doneRating:         { alignItems: 'center', marginTop: 12 },
+  doneRatingStars:    { fontSize: 26, color: '#F5A623', letterSpacing: 3 },
+  doneRatingStarsOff: { color: COLORS.border },
+  doneRatingText:     { fontSize: 13, fontWeight: '700', color: COLORS.text, marginTop: 4 },
+  doneRatingWait:     { fontSize: 12, fontWeight: '600', color: COLORS.textMuted, marginTop: 12 },
 });
 
 export default ActiveDeliveryScreen;

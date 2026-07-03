@@ -96,3 +96,6 @@ yarn-error.log
 
 # Built APKs copied to repo root for sharing
 *.apk
+
+# One-off backend debug/query scripts from manual testing
+backend/_*.js

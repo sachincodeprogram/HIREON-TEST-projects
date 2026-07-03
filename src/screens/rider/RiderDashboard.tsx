@@ -18,8 +18,10 @@ import { useAppDispatch } from '../../hooks/useAppDispatch';
 import useAppSelector from '../../hooks/useAppSelector';
 import { setOnlineStatus } from '../../store/slices/riderSlice';
 import { setActiveOrder } from '../../store/slices/orderSlice';
-import { getMyOrders, acceptOrder } from '../../services/orderService';
+import { getMyOrders, acceptOrder, getOrderById } from '../../services/orderService';
 import { connectSocket, getSocket } from '../../services/socketService';
+import messaging from '@react-native-firebase/messaging';
+import { registerRiderPush, subscribePushTokenRefresh } from '../../services/pushService';
 import { requestLocationPermission, getCurrentPosition } from '../../services/locationService';
 import { getSavedRingtoneId } from '../../services/ringtoneService';
 import { getRingtoneById, DEFAULT_RINGTONE_ID } from '../../constants/ringtones';
@@ -147,6 +149,17 @@ const RiderDashboard = () => {
   };
   const stopRing = () => { ringSound.current?.stop(); };
 
+  // Naya order aane par ek hi jagah se ring karao — socket se aaye ya FCM
+  // notification-tap se, dono raste yahi use karte hain.
+  const ringForOrder = useCallback((order: Order) => {
+    Vibration.vibrate([300, 200, 300, 200, 500]);
+    playRing();
+    setRingOrder(order);
+    setRouteDistance(null);
+    setRouteDuration(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Pulse animation for ring modal
   useEffect(() => {
     if (!ringOrder) return;
@@ -205,6 +218,13 @@ const RiderDashboard = () => {
     return () => { cancelled = true; };
   }, [ringOrder?._id, riderPos]);
 
+  // App restart/reload ke baad redux `isOnline` false se shuru hota hai jabki
+  // backend me rider online hi hota hai — sync karo, warna GPS watch shuru
+  // nahi hota (location stale ho jaati hai) aur socket ring bhi ignore hoti hai.
+  useEffect(() => {
+    if (profile?.isOnline && !isOnline) dispatch(setOnlineStatus(true));
+  }, [profile?.isOnline]);
+
   // Start GPS when online
   useEffect(() => {
     if (!isOnline) {
@@ -215,7 +235,15 @@ const RiderDashboard = () => {
       return;
     }
     requestLocationPermission().then(status => {
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        // Bina location ke bhi order milenge (backend fallback), par rider ko
+        // batao — warna use pata hi nahi chalta ki GPS share nahi ho raha.
+        Alert.alert(
+          'Location Chahiye 📍',
+          'Location permission ke bina aapki live location customer ko nahi dikhegi. Settings me jaake location allow karein.',
+        );
+        return;
+      }
       // Turant ek fix backend ko bhejo taaki order aane se pehle hi server ko
       // pata ho rider kahan hai (radius dispatch isi pe depend karta hai).
       getCurrentPosition()
@@ -253,8 +281,12 @@ const RiderDashboard = () => {
     // Aaj ki kamai/deliveries/rating snapshot bhi le aao.
     try {
       const { data } = await apiClient.get('/rider/earnings');
-      setToday(data?.today || null);
-      if (typeof data?.rating === 'number') setRating(data.rating);
+      // Backend envelope { success, message, data } hai — pehle `data?.today`
+      // padha ja raha tha jo hamesha undefined tha, isliye "Aaj ki kamai"
+      // card delivery ke baad bhi kabhi update nahi hota tha.
+      const earnings = data?.data;
+      setToday(earnings?.today || null);
+      if (typeof earnings?.rating === 'number') setRating(earnings.rating);
     } catch { /* silent */ }
     finally { setRefreshing(false); }
   }, []);
@@ -265,18 +297,49 @@ const RiderDashboard = () => {
       socket.on('new_order_request', (order: Order) => {
         if (!mounted || !isOnline) return;
         // Naya order — sirf real-time ring popup (koi persistent pending list nahi).
-        Vibration.vibrate([300, 200, 300, 200, 500]);
-        playRing();
-        setRingOrder(order);
-        setRouteDistance(null);
-        setRouteDuration(null);
+        ringForOrder(order);
       });
     });
     return () => {
       mounted = false;
       getSocket()?.off('new_order_request');
     };
-  }, [isOnline]);
+  }, [isOnline, ringForOrder]);
+
+  // FCM push: screen lock/off ya app background/band hone par bhi order aaye.
+  // Token backend par register hota hai; dispatch socket ke SAATH push bhi
+  // bhejta hai. Notification tap karne par order fetch karke ring modal kholo
+  // (agar tab tak kisi aur ne accept na kiya ho).
+  useEffect(() => {
+    registerRiderPush();
+    const unsubToken = subscribePushTokenRefresh();
+
+    const openFromPush = async (data?: { [key: string]: any }) => {
+      const orderId = data?.orderId;
+      if (!orderId || typeof orderId !== 'string') return;
+      try {
+        const order = await getOrderById(orderId);
+        if (order.status === 'pending' && !order.rider) {
+          ringForOrder(order);
+        } else {
+          Alert.alert('Order Gaya', 'Yeh order kisi aur rider ne le liya ya cancel ho gaya.');
+        }
+      } catch { /* order fetch fail — chup raho */ }
+    };
+
+    // App band thi, notification tap se khuli
+    messaging().getInitialNotification().then(m => { if (m) openFromPush(m.data); });
+    // App background me thi, notification tap se wapas aayi
+    const unsubOpened = messaging().onNotificationOpenedApp(m => openFromPush(m.data));
+    // App khuli hai par socket toota hua hai (rare) — push se hi ring karao;
+    // socket connected ho to wahi ring karayega, double mat karo.
+    const unsubMsg = messaging().onMessage(async m => {
+      if (getSocket()?.connected) return;
+      openFromPush(m.data);
+    });
+
+    return () => { unsubToken(); unsubOpened(); unsubMsg(); };
+  }, [ringForOrder]);
 
   // Chalu order load karo — mount par aur jab dashboard wapas focus me aaye (delivery se laut ke).
   useFocusEffect(useCallback(() => { loadCurrent(); }, [loadCurrent]));
@@ -448,6 +511,9 @@ const RiderDashboard = () => {
       {/* ─── New Order Ring Modal ─── */}
       <Modal visible={!!ringOrder} transparent animationType="slide" onRequestClose={() => { stopRing(); setRingOrder(null); }}>
         <View style={styles.modalOverlay}>
+          {/* SafeArea bottom: 3-button nav wale phones par Accept/Decline OS
+              nav bar ke neeche dab jaate the — tap hi nahi lagta tha. */}
+          <SafeAreaView edges={['bottom']} style={styles.modalSafe}>
           <Animated.View style={[styles.modalCard, { transform: [{ scale: ringAnim }] }]}>
 
             {/* Header */}
@@ -581,6 +647,7 @@ const RiderDashboard = () => {
               </View>
             )}
           </Animated.View>
+          </SafeAreaView>
         </View>
       </Modal>
     </View>
@@ -699,6 +766,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
+  modalSafe: { backgroundColor: COLORS.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   modalCard: {
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,

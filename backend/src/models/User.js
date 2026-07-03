@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema({
   avatar:       { type: String, default: '' },
   role:         { type: String, enum: ['customer', 'rider'], required: true },
 
+  // FCM device token — screen lock/app background me push bhejne ke liye
+  fcmToken:     { type: String, default: '' },
+
   // Rider-only fields
   vehicleType:       { type: String, default: '' },
   vehicleNumber:     { type: String, default: '' },

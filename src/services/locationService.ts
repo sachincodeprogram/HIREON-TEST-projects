@@ -108,6 +108,27 @@ export function getCurrentPosition(): Promise<Coordinates> {
   });
 }
 
+// Bina permission prompt ke ek quick (low-accuracy) fix — search results ko
+// user ke aas-paas bias karne ke liye. Permission na ho ya fix na mile to
+// chupchaap null (kabhi alert nahi).
+export function getQuickPosition(): Promise<Coordinates | null> {
+  return new Promise(resolve => {
+    (async () => {
+      if (Platform.OS === 'android') {
+        const already = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ).catch(() => false);
+        if (!already) { resolve(null); return; }
+      }
+      Geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+      );
+    })().catch(() => resolve(null));
+  });
+}
+
 // Plain lat,lng string — jab koi bhi geocoder address na de paaye.
 function coordsFallback(coords: Coordinates): LocationResult {
   return {
@@ -159,6 +180,61 @@ async function osmReverseGeocode(coords: Coordinates): Promise<LocationResult | 
   } catch {
     return null;
   }
+}
+
+// Typed address -> coords (forward geocoding). Google pehle, phir OSM.
+// India ke bahut se plot/house numbers Google ke paas nahi hote — tab result
+// APPROXIMATE (area-level) hi milega; isliye caller ko map pin-confirm zaroor
+// karana chahiye. Kuch na mile to null (caller apna fallback center use kare).
+async function googleForwardGeocode(text: string): Promise<LocationResult | null> {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(text)}&components=country:IN&key=${GOOGLE_MAPS_API_KEY}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.status !== 'OK' || !json.results?.length) return null;
+    const result = json.results[0];
+    const loc = result.geometry?.location;
+    if (!loc) return null;
+    let city = '', state = '', country = '';
+    for (const comp of result.address_components || []) {
+      if (comp.types.includes('locality')) city = comp.long_name;
+      else if (comp.types.includes('administrative_area_level_1')) state = comp.long_name;
+      else if (comp.types.includes('country')) country = comp.long_name;
+    }
+    return {
+      coordinates: { lat: loc.lat, lng: loc.lng },
+      address: result.formatted_address || text,
+      city, state, country,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function osmForwardGeocode(text: string): Promise<LocationResult | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&addressdetails=1&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'HIREON-App', 'Accept-Language': 'en' },
+    });
+    const json = await res.json();
+    const first = Array.isArray(json) ? json[0] : null;
+    if (!first?.lat || !first?.lon) return null;
+    const a = first.address || {};
+    return {
+      coordinates: { lat: parseFloat(first.lat), lng: parseFloat(first.lon) },
+      address: first.display_name || text,
+      city: a.city || a.town || a.village || a.suburb || a.county || '',
+      state: a.state || '',
+      country: a.country || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function forwardGeocode(text: string): Promise<LocationResult | null> {
+  return (await googleForwardGeocode(text)) || (await osmForwardGeocode(text));
 }
 
 export async function reverseGeocode(coords: Coordinates): Promise<LocationResult> {

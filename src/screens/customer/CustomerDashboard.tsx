@@ -1,11 +1,11 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, StatusBar, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect, Circle } from 'react-native-svg';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
@@ -56,7 +56,10 @@ const CustomerDashboard = () => {
     finally { dispatch(setOrderLoading(false)); }
   }, []);
 
-  useEffect(() => { loadOrders(); }, []);
+  // Har baar dashboard focus me aaye to fresh list lao — pehle sirf mount par
+  // load hota tha, isliye order place/deliver hone ke baad bhi status badge
+  // aur Active count stale ("Pending") dikhte the.
+  useFocusEffect(useCallback(() => { loadOrders(); }, [loadOrders]));
 
   const activeOrders   = orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
   const recentOrders   = orders.slice(0, 5);
@@ -89,7 +92,9 @@ const CustomerDashboard = () => {
     <Card
       key={order._id}
       accent={isActive ? COLORS.primary : undefined}
-      onPress={isActive && TRACKABLE.includes(order.status)
+      // Pending (rider-search) aur delivered (rating) bhi LiveTracking me
+      // khulte hain — sirf cancelled ke liye kholne ko kuch nahi.
+      onPress={order.status !== 'cancelled'
         ? () => navigation.navigate('LiveTracking', { orderId: order._id })
         : undefined}>
       <View style={styles.cardHeader}>

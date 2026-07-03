@@ -12,6 +12,8 @@ router.post('/:id/redispatch',   protect, requireRole('customer'), ctrl.redispat
 router.post('/:id/accept',       protect, requireRole('rider'),    ctrl.acceptOrder);
 router.post('/:id/pickup',       protect, requireRole('rider'),    ctrl.confirmPickup);
 router.post('/:id/deliver',      protect, requireRole('rider'),    ctrl.confirmDelivery);
+router.patch('/:id/delivery-address', protect, requireRole('customer'), ctrl.updateDeliveryAddress);
+router.post('/:id/rate',         protect, requireRole('customer'), ctrl.rateOrder);
 router.post('/:id/cancel',       protect, ctrl.cancelOrder);
 
 module.exports = router;

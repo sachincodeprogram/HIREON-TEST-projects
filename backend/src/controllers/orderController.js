@@ -223,11 +223,116 @@ const confirmDelivery = async (req, res) => {
   }
 };
 
+// PATCH /api/v1/orders/:id/delivery-address — customer deliver hone tak delivery
+// address badal sakta hai. Fare nayi pickup→delivery doori ke hisaab se recalc
+// hota hai (doori badhi to paise +, ghati to -) aur rider ko room me live update milta hai.
+const updateDeliveryAddress = async (req, res) => {
+  try {
+    const { address, coordinates, contactName, contactPhone } = req.body;
+    if (!address || !coordinates?.lat || !coordinates?.lng) {
+      return res.status(400).json(error('address and coordinates required'));
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json(error('Order not found'));
+    if (order.customer.toString() !== req.user._id.toString()) return res.status(403).json(error('Not your order'));
+    if (!['pending', 'accepted', 'picked_up', 'in_transit'].includes(order.status)) {
+      return res.status(400).json(error('Delivery address can no longer be changed'));
+    }
+
+    const oldFare = order.fare.estimated;
+    order.delivery.address     = address;
+    order.delivery.coordinates = coordinates;
+    if (contactName  !== undefined) order.delivery.contactName  = contactName;
+    if (contactPhone !== undefined) order.delivery.contactPhone = contactPhone;
+
+    const { estimated, riderEarning, distance } = calculateFare({
+      pickup: order.pickup.coordinates,
+      delivery: coordinates,
+      parcel: order.parcel,
+    });
+    order.fare.estimated = estimated;
+    order.fare.final     = estimated;
+    order.fare.distance  = distance;
+    order.riderEarning   = riderEarning;
+
+    const diff = estimated - oldFare;
+    order.timeline.push({
+      status: order.status,
+      note: `Delivery address updated — fare ₹${oldFare} → ₹${estimated}` +
+            (diff !== 0 ? ` (${diff > 0 ? '+' : ''}₹${diff})` : ''),
+    });
+    await order.save();
+
+    // Order room me sabko (rider + customer) naya address/fare turant bhejo.
+    req.io?.to(order._id.toString()).emit('order_update', {
+      status:        order.status,
+      delivery:      order.delivery,
+      fare:          order.fare,
+      riderEarning:  order.riderEarning,
+      addressChanged: true,
+    });
+
+    res.json(success('Delivery address updated', order));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
+// POST /api/v1/orders/:id/rate — delivery ke baad customer rider ko 1-5 star
+// deta hai (ek hi baar). Rating rider ke aggregate (rating/ratingCount) me
+// jaati hai aur rider ko order room me live update milta hai.
+const rateOrder = async (req, res) => {
+  try {
+    const rating = Math.round(Number(req.body.rating));
+    const review = (req.body.review || '').toString().slice(0, 300);
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json(error('rating 1 se 5 ke beech chahiye'));
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json(error('Order not found'));
+    if (order.customer.toString() !== req.user._id.toString()) return res.status(403).json(error('Not your order'));
+    if (order.status !== 'delivered') return res.status(400).json(error('Delivery ke baad hi rating de sakte hain'));
+    if (order.rating) return res.status(400).json(error('Is order ko rating pehle hi di ja chuki hai'));
+
+    order.rating = rating;
+    order.review = review;
+    order.timeline.push({ status: 'delivered', note: `Customer ne ${rating}★ rating di` });
+    await order.save();
+
+    // Rider ka running average update karo
+    if (order.rider) {
+      const rider = await User.findById(order.rider);
+      if (rider) {
+        const count  = rider.ratingCount || 0;
+        const newAvg = ((rider.rating || 5) * count + rating) / (count + 1);
+        rider.rating      = Math.round(newAvg * 10) / 10;
+        rider.ratingCount = count + 1;
+        await rider.save();
+      }
+    }
+
+    req.io?.to(order._id.toString()).emit('order_update', { status: 'delivered', rating });
+    res.json(success('Rating saved', order));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
 // POST /api/v1/orders/:id/cancel
 const cancelOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json(error('Order not found'));
+
+    // Sirf order ka customer, assigned rider ya admin hi cancel kar sakta hai —
+    // pehle koi bhi logged-in user kisi ka bhi order cancel kar sakta tha.
+    const uid = req.user._id.toString();
+    const isOwner = order.customer.toString() === uid || order.rider?.toString() === uid;
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json(error('Not your order'));
+    }
 
     const cancellableStatuses = ['pending', 'accepted'];
     if (!cancellableStatuses.includes(order.status)) {
@@ -248,4 +353,4 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-module.exports = { estimateFare, createOrder, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, confirmPickup, confirmDelivery, cancelOrder };
+module.exports = { estimateFare, createOrder, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, confirmPickup, confirmDelivery, updateDeliveryAddress, rateOrder, cancelOrder };
