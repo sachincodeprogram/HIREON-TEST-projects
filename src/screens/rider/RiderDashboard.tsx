@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Switch, Alert, ActivityIndicator,
-  StatusBar, Modal, Vibration, Animated, Easing, Dimensions,
+  StatusBar, Modal, Vibration, Animated, Easing, Dimensions, AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect, Circle } from 'react-native-svg';
@@ -21,7 +21,9 @@ import { setActiveOrder } from '../../store/slices/orderSlice';
 import { getMyOrders, acceptOrder, getOrderById } from '../../services/orderService';
 import { connectSocket, getSocket } from '../../services/socketService';
 import messaging from '@react-native-firebase/messaging';
+import notifee, { EventType } from '@notifee/react-native';
 import { registerRiderPush, subscribePushTokenRefresh } from '../../services/pushService';
+import { cancelOrderRing, RING_WINDOW_MS } from '../../services/orderRingNotification';
 import { requestLocationPermission, getCurrentPosition } from '../../services/locationService';
 import { getSavedRingtoneId } from '../../services/ringtoneService';
 import { getRingtoneById, DEFAULT_RINGTONE_ID } from '../../constants/ringtones';
@@ -32,8 +34,8 @@ import Sound from 'react-native-sound';
 
 Sound.setCategory('Playback');
 
-// Ek rider ko order accept karne ka window = ek tier (1:30 min). Iske baad popup khud band.
-const RING_WINDOW_MS = 90000;
+// Accept window (RING_WINDOW_MS = ek tier, 1:30 min) orderRingNotification se
+// aata hai taaki in-app popup aur lock-screen notification ek saath timeout hon.
 
 const SCREEN_W = Dimensions.get('window').width;
 const HEADER_H = 152;
@@ -153,7 +155,15 @@ const RiderDashboard = () => {
   // notification-tap se, dono raste yahi use karte hain.
   const ringForOrder = useCallback((order: Order) => {
     Vibration.vibrate([300, 200, 300, 200, 500]);
-    playRing();
+    // Agar tray me isi order ki notifee ring pehle se baj rahi hai to use HI
+    // ringer rehne do, in-app sound mat chhedo — full-screen relaunch ke baad
+    // navigator settle hote waqt dashboard remount hota hai, aur notification
+    // hi wo cheez hai jo remounts ke paar bajti rehti hai (yahan cancel kar
+    // dete to dusra mount ring dobara khol hi nahi pata). Cancel sirf
+    // accept/decline/timeout/close par hota hai.
+    notifee.getDisplayedNotifications()
+      .then(list => { if (!list.some(n => n.id === order._id)) playRing(); })
+      .catch(() => playRing());
     setRingOrder(order);
     setRouteDistance(null);
     setRouteDuration(null);
@@ -184,7 +194,7 @@ const RiderDashboard = () => {
       useNativeDriver: false,
     });
     anim.start(({ finished }) => {
-      if (finished) { stopRing(); setRingOrder(null); }
+      if (finished) { stopRing(); cancelOrderRing(ringOrder._id); setRingOrder(null); }
     });
     return () => anim.stop();
   }, [ringOrder?._id]);
@@ -306,39 +316,86 @@ const RiderDashboard = () => {
     };
   }, [isOnline, ringForOrder]);
 
-  // FCM push: screen lock/off ya app background/band hone par bhi order aaye.
-  // Token backend par register hota hai; dispatch socket ke SAATH push bhi
-  // bhejta hai. Notification tap karne par order fetch karke ring modal kholo
-  // (agar tab tak kisi aur ne accept na kiya ho).
+  // FCM push: screen lock/off ya app background/band hone par bhi order RING
+  // kare. Backend data-only push bhejta hai; background me index.js ka handler
+  // notifee se call-jaisi full-screen ring notification dikhata hai. Wahan se
+  // app khulne par (full-screen launch ya tap) yahan order fetch karke in-app
+  // ring modal kholo (agar tab tak kisi aur ne accept na kiya ho).
   useEffect(() => {
     registerRiderPush();
     const unsubToken = subscribePushTokenRefresh();
 
-    const openFromPush = async (data?: { [key: string]: any }) => {
+    // Cold-start par getInitialNotification aur PRESS event dono aa sakte
+    // hain — ek hi order ke liye modal do baar mat kholo.
+    let lastHandled = '';
+    // autoAccept: lock-screen notification ka "✅ Accept" button — call answer
+    // jaisa, order seedha accept karke ActiveDelivery par le jao (modal skip).
+    const openFromPush = async (data?: { [key: string]: any }, autoAccept = false) => {
+      if (data?.type !== 'new_order_request') return;
       const orderId = data?.orderId;
-      if (!orderId || typeof orderId !== 'string') return;
+      if (!orderId || typeof orderId !== 'string' || orderId === lastHandled) return;
+      lastHandled = orderId;
       try {
         const order = await getOrderById(orderId);
         if (order.status === 'pending' && !order.rider) {
-          ringForOrder(order);
+          if (autoAccept) handleAccept(order);
+          else ringForOrder(order);
         } else {
+          cancelOrderRing(orderId);
           Alert.alert('Order Gaya', 'Yeh order kisi aur rider ne le liya ya cancel ho gaya.');
         }
       } catch { /* order fetch fail — chup raho */ }
     };
 
-    // App band thi, notification tap se khuli
-    messaging().getInitialNotification().then(m => { if (m) openFromPush(m.data); });
-    // App background me thi, notification tap se wapas aayi
-    const unsubOpened = messaging().onNotificationOpenedApp(m => openFromPush(m.data));
-    // App khuli hai par socket toota hua hai (rare) — push se hi ring karao;
-    // socket connected ho to wahi ring karayega, double mat karo.
+    // App band thi — full-screen launch (screen off) ya notification/Accept tap
+    // se khuli. YAHAN kabhi auto-accept mat karna: full-screen launch par
+    // notifee ka initial pressAction galat 'accept' report kar sakta hai
+    // (PendingIntent extras collision — device test me bina tap ke order accept
+    // ho gaya tha). Cold start par hamesha ring modal kholo; rider wahan
+    // Accept dabata hai. Asli button-tap ACTION_PRESS event se hi aata hai.
+    notifee.getInitialNotification().then(init => {
+      if (init) openFromPush(init.notification.data);
+    });
+    // App background me thi — notifee press/action se wapas aayi
+    const unsubNotifee = notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS) openFromPush(detail.notification?.data);
+      if (type === EventType.ACTION_PRESS) {
+        const actionId = detail.pressAction?.id;
+        if (actionId === 'accept') {
+          openFromPush(detail.notification?.data, true);
+        } else if (actionId === 'decline') {
+          // Call decline jaisa — ring band, modal (agar khula ho) bhi band.
+          const orderId = detail.notification?.data?.orderId;
+          if (typeof orderId === 'string') cancelOrderRing(orderId);
+          stopRing();
+          setRingOrder(null);
+        }
+      }
+    });
+    // App khuli hai par socket toota hua hai (rare) — data-only push foreground
+    // me yahan aata hai; socket connected ho to wahi ring karayega, double mat karo.
     const unsubMsg = messaging().onMessage(async m => {
       if (getSocket()?.connected) return;
       openFromPush(m.data);
     });
 
-    return () => { unsubToken(); unsubOpened(); unsubMsg(); };
+    // App process zinda thi aur full-screen intent ne use samne la diya (screen
+    // off wala case) — tab na getInitialNotification milta hai na PRESS event.
+    // Isliye: active hote hi dekho koi ring notification tray me baj rahi hai
+    // kya — hai to usi se modal khol do. Mount par bhi ek baar (warm relaunch).
+    const openDisplayedRing = async () => {
+      try {
+        const displayed = await notifee.getDisplayedNotifications();
+        const ring = displayed.find(n => n.notification?.data?.type === 'new_order_request');
+        if (ring) openFromPush(ring.notification.data);
+      } catch { /* chup raho */ }
+    };
+    openDisplayedRing();
+    const appStateSub = AppState.addEventListener('change', s => {
+      if (s === 'active') openDisplayedRing();
+    });
+
+    return () => { unsubToken(); unsubNotifee(); unsubMsg(); appStateSub.remove(); };
   }, [ringForOrder]);
 
   // Chalu order load karo — mount par aur jab dashboard wapas focus me aaye (delivery se laut ke).
@@ -358,6 +415,7 @@ const RiderDashboard = () => {
 
   const handleAccept = async (order: Order) => {
     stopRing();
+    cancelOrderRing(order._id);
     try {
       setAccepting(order._id);
       const accepted = await acceptOrder(order._id);
@@ -376,6 +434,7 @@ const RiderDashboard = () => {
 
   const handleDecline = (orderId: string) => {
     stopRing();
+    cancelOrderRing(orderId);
     if (ringOrder?._id === orderId) setRingOrder(null);
   };
 
@@ -509,7 +568,7 @@ const RiderDashboard = () => {
       </ScrollView>
 
       {/* ─── New Order Ring Modal ─── */}
-      <Modal visible={!!ringOrder} transparent animationType="slide" onRequestClose={() => { stopRing(); setRingOrder(null); }}>
+      <Modal visible={!!ringOrder} transparent animationType="slide" onRequestClose={() => { stopRing(); cancelOrderRing(ringOrder?._id); setRingOrder(null); }}>
         <View style={styles.modalOverlay}>
           {/* SafeArea bottom: 3-button nav wale phones par Accept/Decline OS
               nav bar ke neeche dab jaate the — tap hi nahi lagta tha. */}

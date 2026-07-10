@@ -1,32 +1,26 @@
 const { messaging } = require('../config/firebase');
 
 // Rider ko naya-order FCM push — screen lock / app background / app band hone
-// par bhi order dikhe. Notification payload system tray me khud dikhta hai
-// (heads-up + lock screen, "orders" HIGH-importance channel par), aur data me
-// orderId jaata hai taaki tap karne par app ring modal khol sake.
+// par bhi order RING kare (sirf chup notification nahi). Isliye yeh DATA-ONLY
+// message hai: notification payload hota to system tray khud dikha deta aur
+// app ka background handler kabhi nahi chalta. Data-only + priority high se
+// app ka setBackgroundMessageHandler (index.js) har haal me chalta hai aur
+// notifee se call-jaisi full-screen looping-ring notification dikhata hai.
+// Title/body bhi data me jaate hain (FCM data values sirf string hoti hain).
 // Return: 'invalid-token' agar token expire/uninstall ho gaya (caller saaf kare).
 const sendOrderPush = async (fcmToken, order) => {
   if (!fcmToken) return null;
   try {
     await messaging().send({
       token: fcmToken,
-      notification: {
-        title: `🔔 Naya Order! ₹${order.riderEarning || ''} kamai`,
-        body: `Pickup: ${order.pickup?.address || 'address dekhne ke liye kholo'}`,
-      },
       data: {
         type: 'new_order_request',
         orderId: order._id ? order._id.toString() : String(order._id),
+        title: `🔔 Naya Order! ₹${order.riderEarning || ''} kamai`,
+        body: `📦 Pickup: ${order.pickup?.address || 'app me dekho'}\n📍 Drop: ${order.delivery?.address || 'app me dekho'}`,
       },
       android: {
-        priority: 'high',
-        notification: {
-          channelId: 'orders',
-          sound: 'default',
-          defaultVibrateTimings: true,
-          priority: 'max',
-          visibility: 'public', // lock screen par bhi content dikhe
-        },
+        priority: 'high', // Doze me bhi turant deliver ho
       },
     });
     return 'sent';

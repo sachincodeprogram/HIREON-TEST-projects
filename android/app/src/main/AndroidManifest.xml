@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Android 13+ par push notification dikhane ke liye runtime permission -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Screen off/lock par naya-order notification ko incoming-call ki tarah
+         full-screen kholne ke liye (notifee fullScreenAction) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Android 11+ package visibility: contact picker (ACTION_PICK) ko dikhne do,
@@ -33,6 +37,8 @@
         android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
         android:launchMode="singleTask"
         android:windowSoftInputMode="adjustResize"
+        android:showWhenLocked="true"
+        android:turnScreenOn="true"
         android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
