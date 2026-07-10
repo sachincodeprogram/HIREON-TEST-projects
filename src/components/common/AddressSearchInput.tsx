@@ -27,6 +27,25 @@ interface Props {
 // map pin-confirm se hokar jaate hain — kyunki Google ke paas India ke bahut
 // se house/plot numbers ke exact coords nahi hote. Address text user ka
 // likha hua rehta hai, coords pin se — wahi rider ko milte hain.
+
+// Google suggestion me house/plot no. NAHI hota ("59, Tusiana Village..." ka
+// suggestion sirf "Tusiana Village, Knowledge Park V..." aata hai). Suggestion
+// tap par user ka typed detail udd jaata tha — rider ko sirf area milta tha.
+// Isliye: typed text ke shuru ke jo segments (comma-separated) suggestion me
+// nahi milte (house no. jaise "59" / "NS - 59"), unhe suggestion ke aage
+// waapas joda jaata hai. Pehla matched segment aate hi ruk jao — aage ka
+// area/city suggestion me pehle se hai.
+export const mergeTypedWithSuggestion = (typed: string, suggestion: string): string => {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const sNorm = norm(suggestion);
+  const missing: string[] = [];
+  for (const seg of typed.split(',').map(s => s.trim()).filter(Boolean)) {
+    const n = norm(seg);
+    if (n && !sNorm.includes(n)) missing.push(seg);
+    else break;
+  }
+  return missing.length ? `${missing.join(', ')}, ${suggestion}` : suggestion;
+};
 const AddressSearchInput: React.FC<Props> = ({
   label,
   placeholder,
@@ -118,10 +137,21 @@ const AddressSearchInput: React.FC<Props> = ({
           placeholder={placeholder}
           fetchDetails
           onPress={(data, details) => {
-            if (!details) return;
+            if (!details) {
+              // Place Details fail (network/quota) — chupchaap kuch na hone se
+              // user atak jaata tha; typed-address fallback ka raasta batao.
+              Alert.alert(
+                'Location Load Nahi Hui',
+                'Internet check karke dobara try karo, ya "Yahi address use karo" daba ke map par pin lagao.',
+              );
+              return;
+            }
             const { lat, lng } = details.geometry.location;
-            setTypedText(data.description);
-            openMapAt({ lat, lng }, data.description);
+            // User ka typed house/plot no. suggestion me merge karo — exact
+            // address hi order ke saath rider tak jaata hai.
+            const fullAddress = mergeTypedWithSuggestion(typedText, data.description);
+            setTypedText(fullAddress);
+            openMapAt({ lat, lng }, fullAddress);
           }}
           query={{
             key: GOOGLE_MAPS_API_KEY,

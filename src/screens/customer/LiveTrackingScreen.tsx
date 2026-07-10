@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Linking, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Linking, Animated, Easing, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, AnimatedRegion, MarkerAnimated } from 'react-native-maps';
@@ -7,7 +7,7 @@ import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { setActiveOrder, setRiderCoords } from '../../store/slices/orderSlice';
-import { connectSocket, trackOrder, getSocket } from '../../services/socketService';
+import { connectSocket, trackOrder, getSocket, onSocketReconnect } from '../../services/socketService';
 import { getOrderById, cancelOrder, getNearbyRiders, redispatchOrder, updateDeliveryAddress, rateOrder } from '../../services/orderService';
 import { fetchRoute } from '../../services/routeService';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -129,6 +129,20 @@ const LiveTrackingScreen = () => {
 
   useEffect(() => {
     let mounted = true;
+
+    // Reconnect / app foreground par order fresh laao — disconnect ke beech ke
+    // status/address updates miss ho jaate hain (room re-join socketService
+    // khud karta hai).
+    const refetchOrder = () => {
+      getOrderById(orderId)
+        .then(o => { if (mounted) { setOrder(o); dispatch(setActiveOrder(o)); } })
+        .catch(() => {});
+    };
+    const offReconnect = onSocketReconnect(refetchOrder);
+    const appStateSub = AppState.addEventListener('change', s => {
+      if (s === 'active') refetchOrder();
+    });
+
     const init = async () => {
       try {
         const o = await getOrderById(orderId);
@@ -158,6 +172,8 @@ const LiveTrackingScreen = () => {
     init();
     return () => {
       mounted = false;
+      offReconnect();
+      appStateSub.remove();
       getSocket()?.off('rider_location');
       getSocket()?.off('order_update');
       getSocket()?.off('order_no_rider');

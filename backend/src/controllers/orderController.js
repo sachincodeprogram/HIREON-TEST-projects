@@ -3,6 +3,7 @@ const User           = require('../models/User');
 const RiderLocation  = require('../models/RiderLocation');
 const { calculateFare, haversineKm } = require('../utils/fareCalculator');
 const { dispatchOrder, cancelDispatch } = require('../utils/dispatch');
+const { sendAddressChangePush } = require('../utils/push');
 const { success, error } = require('../utils/apiResponse');
 
 const genOtp = () => Math.floor(1000 + Math.random() * 9000).toString();
@@ -273,6 +274,18 @@ const updateDeliveryAddress = async (req, res) => {
       addressChanged: true,
     });
 
+    // Rider ka socket toota/background ho to bhi naya address pahunche — FCM push.
+    if (order.rider) {
+      User.findById(order.rider).select('fcmToken').then(rider => {
+        if (!rider?.fcmToken) return;
+        sendAddressChangePush(rider.fcmToken, order).then(result => {
+          if (result === 'invalid-token') {
+            User.updateOne({ _id: order.rider }, { fcmToken: '' }).catch(() => {});
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+
     res.json(success('Delivery address updated', order));
   } catch (err) {
     res.status(500).json(error(err.message));
@@ -339,10 +352,12 @@ const cancelOrder = async (req, res) => {
       return res.status(400).json(error('Cannot cancel at this stage'));
     }
 
+    // Body ke bina cancel (empty POST) par req.body undefined hota hai — 500 mat do.
+    const note = req.body?.note || '';
     order.status          = 'cancelled';
     order.cancelledBy     = req.user.role;
-    order.cancellationNote = req.body.note || '';
-    order.timeline.push({ status: 'cancelled', note: req.body.note || 'Order cancelled' });
+    order.cancellationNote = note;
+    order.timeline.push({ status: 'cancelled', note: note || 'Order cancelled' });
     await order.save();
     cancelDispatch(order._id); // cancel ho gaya — dispatch rok do
 

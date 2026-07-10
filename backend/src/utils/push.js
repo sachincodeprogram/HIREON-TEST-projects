@@ -40,4 +40,42 @@ const sendOrderPush = async (fcmToken, order) => {
   }
 };
 
-module.exports = { sendOrderPush };
+// Rider ko address-change push — socket toota ho / app background me ho tab
+// bhi naya delivery address pahunch jaye (order_update sirf room me jaata hai,
+// jo reconnect par miss ho sakta hai).
+const sendAddressChangePush = async (fcmToken, order) => {
+  if (!fcmToken) return null;
+  try {
+    await messaging().send({
+      token: fcmToken,
+      notification: {
+        title: '📍 Delivery Address Badla',
+        body: `Naya address: ${order.delivery?.address || 'app me dekho'}`,
+      },
+      data: {
+        type: 'address_changed',
+        orderId: order._id ? order._id.toString() : String(order._id),
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'orders',
+          sound: 'default',
+          defaultVibrateTimings: true,
+          priority: 'max',
+          visibility: 'public',
+        },
+      },
+    });
+    return 'sent';
+  } catch (e) {
+    if (e.code === 'messaging/registration-token-not-registered' ||
+        e.code === 'messaging/invalid-registration-token') {
+      return 'invalid-token';
+    }
+    console.warn('[PUSH] address-change send failed:', e.message);
+    return null;
+  }
+};
+
+module.exports = { sendOrderPush, sendAddressChangePush };

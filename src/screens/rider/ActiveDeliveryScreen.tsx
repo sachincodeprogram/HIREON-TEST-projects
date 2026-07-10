@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Alert, TextInput, Animated, TouchableOpacity, Linking, Pressable,
+  View, Text, StyleSheet, ScrollView, Alert, TextInput, Animated, TouchableOpacity, Linking, Pressable, AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
@@ -10,7 +10,7 @@ import { RiderStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { setActiveOrder } from '../../store/slices/orderSlice';
-import { connectSocket, joinOrderRoom, emitRiderLocation } from '../../services/socketService';
+import { connectSocket, joinOrderRoom, emitRiderLocation, onSocketReconnect } from '../../services/socketService';
 import { getOrderById, confirmPickup, confirmDelivery } from '../../services/orderService';
 import { requestLocationPermission, getCurrentPosition } from '../../services/locationService';
 import { fetchRoute } from '../../services/routeService';
@@ -125,6 +125,20 @@ const ActiveDeliveryScreen = () => {
 
   useEffect(() => {
     let mounted = true;
+
+    // Socket toota tha (network switch / background) to beech ke updates —
+    // jaise customer ka address change — miss ho jaate hain. Reconnect aur
+    // app wapas foreground aane par order fresh laao.
+    const refetchOrder = () => {
+      getOrderById(orderId)
+        .then(o => { if (mounted) { setOrder(o); dispatch(setActiveOrder(o)); } })
+        .catch(() => {});
+    };
+    const offReconnect = onSocketReconnect(refetchOrder);
+    const appStateSub = AppState.addEventListener('change', s => {
+      if (s === 'active') refetchOrder();
+    });
+
     const init = async () => {
       try {
         const o = await getOrderById(orderId);
@@ -174,6 +188,8 @@ const ActiveDeliveryScreen = () => {
     init();
     return () => {
       mounted = false;
+      offReconnect();
+      appStateSub.remove();
       if (locationWatchId.current !== null) Geolocation.clearWatch(locationWatchId.current);
     };
   }, [orderId]);
