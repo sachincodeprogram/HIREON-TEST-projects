@@ -43,6 +43,14 @@ export const acceptOrder = async (id: string): Promise<Order> => {
   return data.data;
 };
 
+// Rider ne ring thukra di — backend ko batao taaki sab notified riders ke
+// mana karne par dispatch agli tier turant fire kare (90s ka wait na ho).
+// Fire-and-forget: fail ho jaye to bhi local ring band hoti hai, tier apne
+// timer se aage badh hi jaati hai.
+export const declineOrder = async (id: string): Promise<void> => {
+  await apiClient.post(`/orders/${id}/decline`);
+};
+
 export const confirmPickup = async (id: string, otp: string): Promise<Order> => {
   const { data } = await apiClient.post(`/orders/${id}/pickup`, { otp });
   return data.data;

@@ -18,7 +18,7 @@ import { useAppDispatch } from '../../hooks/useAppDispatch';
 import useAppSelector from '../../hooks/useAppSelector';
 import { setOnlineStatus } from '../../store/slices/riderSlice';
 import { setActiveOrder } from '../../store/slices/orderSlice';
-import { getMyOrders, acceptOrder, getOrderById } from '../../services/orderService';
+import { getMyOrders, acceptOrder, declineOrder, getOrderById } from '../../services/orderService';
 import { connectSocket, getSocket } from '../../services/socketService';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { EventType } from '@notifee/react-native';
@@ -364,9 +364,13 @@ const RiderDashboard = () => {
         if (actionId === 'accept') {
           openFromPush(detail.notification?.data, true);
         } else if (actionId === 'decline') {
-          // Call decline jaisa — ring band, modal (agar khula ho) bhi band.
+          // Call decline jaisa — ring band, modal (agar khula ho) bhi band,
+          // aur backend ko decline batao (tier jaldi aage badhe).
           const orderId = detail.notification?.data?.orderId;
-          if (typeof orderId === 'string') cancelOrderRing(orderId);
+          if (typeof orderId === 'string') {
+            cancelOrderRing(orderId);
+            declineOrder(orderId).catch(() => {});
+          }
           stopRing();
           setRingOrder(null);
         }
@@ -436,6 +440,9 @@ const RiderDashboard = () => {
     stopRing();
     cancelOrderRing(orderId);
     if (ringOrder?._id === orderId) setRingOrder(null);
+    // Backend ko batao — sab notified riders mana kar den to agli tier
+    // turant fire ho (fire-and-forget, fail par local decline to ho hi gaya).
+    declineOrder(orderId).catch(() => {});
   };
 
   const firstName = profile?.name?.split(' ')[0] || 'Rider';
@@ -568,7 +575,7 @@ const RiderDashboard = () => {
       </ScrollView>
 
       {/* ─── New Order Ring Modal ─── */}
-      <Modal visible={!!ringOrder} transparent animationType="slide" onRequestClose={() => { stopRing(); cancelOrderRing(ringOrder?._id); setRingOrder(null); }}>
+      <Modal visible={!!ringOrder} transparent animationType="slide" onRequestClose={() => { if (ringOrder) handleDecline(ringOrder._id); }}>
         <View style={styles.modalOverlay}>
           {/* SafeArea bottom: 3-button nav wale phones par Accept/Decline OS
               nav bar ke neeche dab jaate the — tap hi nahi lagta tha. */}

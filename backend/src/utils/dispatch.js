@@ -14,7 +14,8 @@ const TIERS = [
 // 4:30 (270s) tak bhi koi rider na le to customer ko "rider uplabdh nahi" bata do.
 const NO_RIDER_MS = 270000;
 
-// orderId(string) -> { timers: NodeJS.Timeout[], notified: Set<riderId> }
+// orderId(string) -> { timers: NodeJS.Timeout[], notified: Set<riderId>,
+//   declined: Set<riderId>, tierIdx, ctx: { io, onlineRiders, id, pickup, payload } }
 const active = new Map();
 
 // Cancel any pending tier timers for an order (accept/cancel ho gaya).
@@ -97,11 +98,20 @@ const dispatchOrder = (io, onlineRiders, { orderId, pickup, payload }) => {
   if (!io || !onlineRiders || !pickup) return;
   const id = orderId.toString();
   cancelDispatch(id); // safety: purane timers saaf karo
-  const entry = { timers: [], notified: new Set() };
+  const entry = {
+    timers: [],
+    notified: new Set(),
+    declined: new Set(),
+    tierIdx: 0,
+    // registerDecline ko tier aage badhane ke liye yehi context chahiye
+    ctx: { io, onlineRiders, id, pickup, payload },
+  };
   active.set(id, entry);
 
-  TIERS.forEach(({ radiusKm, delayMs }) => {
+  TIERS.forEach(({ radiusKm, delayMs }, idx) => {
     const t = setTimeout(() => {
+      // Decline se tier pehle hi aage badh chuki ho to peeche mat le jao
+      entry.tierIdx = Math.max(entry.tierIdx, idx);
       notifyTier(io, onlineRiders, { id, pickup, payload }, radiusKm, entry).catch(() => {});
     }, delayMs);
     entry.timers.push(t);
@@ -113,4 +123,40 @@ const dispatchOrder = (io, onlineRiders, { orderId, pickup, payload }) => {
   entry.timers.push(noRiderTimer);
 };
 
-module.exports = { dispatchOrder, cancelDispatch };
+// Rider ne order thukra diya (app ka Decline button / notification action).
+// Tier ka timer 90s ka hai — par jab AB TAK ping kiye gaye SAB riders mana
+// kar chuke hon to intezaar bekaar hai: agli tier turant fire karo. Nayi
+// tier bhi koi naya rider na de (aur sab declined hi rahen) to cascade
+// karke aage badho; aakhri tier ke baad customer ko "rider uplabdh nahi"
+// foran bata do — 4:30 ka intezaar nahi.
+// (Tier ke original timers chalte rehte hain — notifyTier `notified` ki wajah
+// se idempotent hai, aur baad me online hue naye riders ko pakad leta hai.)
+const registerDecline = async (orderId, riderId) => {
+  const id = orderId.toString();
+  const entry = active.get(id);
+  if (!entry) return; // dispatch khatam/accept ho chuka — kuch nahi karna
+  entry.declined.add(riderId.toString());
+
+  const { io, onlineRiders, pickup, payload } = entry.ctx;
+  // Jab tak "sab notified riders ne mana kiya hua hai" bana rahe, tiers
+  // fire karte jao — notifyTier naya rider jod de to loop ruk jaata hai
+  // (uska jawab aane ka intezaar hoga).
+  while (active.has(id)) {
+    const allDeclined =
+      entry.notified.size > 0 &&
+      [...entry.notified].every((rid) => entry.declined.has(rid));
+    if (!allDeclined) return;
+
+    const nextIdx = entry.tierIdx + 1;
+    if (nextIdx >= TIERS.length) {
+      console.log(`[DISPATCH] ${id}: sab riders ne decline kiya, tiers khatam — no-rider abhi`);
+      await notifyNoRider(io, id);
+      return;
+    }
+    entry.tierIdx = nextIdx;
+    console.log(`[DISPATCH] ${id}: sab notified riders ne decline kiya — tier ${nextIdx + 1} (${TIERS[nextIdx].radiusKm}km) abhi fire`);
+    await notifyTier(io, onlineRiders, { id, pickup, payload }, TIERS[nextIdx].radiusKm, entry);
+  }
+};
+
+module.exports = { dispatchOrder, cancelDispatch, registerDecline };

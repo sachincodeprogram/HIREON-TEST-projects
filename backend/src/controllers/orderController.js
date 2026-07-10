@@ -2,7 +2,7 @@ const Order          = require('../models/Order');
 const User           = require('../models/User');
 const RiderLocation  = require('../models/RiderLocation');
 const { calculateFare, haversineKm } = require('../utils/fareCalculator');
-const { dispatchOrder, cancelDispatch } = require('../utils/dispatch');
+const { dispatchOrder, cancelDispatch, registerDecline } = require('../utils/dispatch');
 const { sendAddressChangePush } = require('../utils/push');
 const { success, error } = require('../utils/apiResponse');
 
@@ -172,6 +172,22 @@ const acceptOrder = async (req, res) => {
     req.io?.to(order._id.toString()).emit('order_update', { status: 'accepted', rider: order.rider, pickupOtp: order.pickupOtp });
 
     res.json(success('Order accepted', order));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
+// POST /api/v1/orders/:id/decline — rider ne ring thukra di. Order assign
+// nahi hota tha to bhi yeh zaroori hai: dispatch ko batata hai taaki sab
+// notified riders ke mana karne par agli tier 90s ka wait kiye BINA fire ho.
+const declineOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).select('status');
+    if (!order) return res.status(404).json(error('Order not found'));
+    // Pending nahi (kisi ne le liya / cancel) — decline ka ab koi matlab
+    // nahi, par rider ke liye yeh error nahi hai.
+    if (order.status === 'pending') registerDecline(order._id, req.user._id).catch(() => {});
+    res.json(success('Order declined'));
   } catch (err) {
     res.status(500).json(error(err.message));
   }
@@ -368,4 +384,4 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-module.exports = { estimateFare, createOrder, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, confirmPickup, confirmDelivery, updateDeliveryAddress, rateOrder, cancelOrder };
+module.exports = { estimateFare, createOrder, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, declineOrder, confirmPickup, confirmDelivery, updateDeliveryAddress, rateOrder, cancelOrder };

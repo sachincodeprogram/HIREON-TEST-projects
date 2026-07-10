@@ -10,6 +10,7 @@ router.get('/:id',               protect, ctrl.getOrder);
 router.get('/:id/nearby-riders', protect, ctrl.getNearbyRiders);
 router.post('/:id/redispatch',   protect, requireRole('customer'), ctrl.redispatchOrder);
 router.post('/:id/accept',       protect, requireRole('rider'),    ctrl.acceptOrder);
+router.post('/:id/decline',      protect, requireRole('rider'),    ctrl.declineOrder);
 router.post('/:id/pickup',       protect, requireRole('rider'),    ctrl.confirmPickup);
 router.post('/:id/deliver',      protect, requireRole('rider'),    ctrl.confirmDelivery);
 router.patch('/:id/delivery-address', protect, requireRole('customer'), ctrl.updateDeliveryAddress);
