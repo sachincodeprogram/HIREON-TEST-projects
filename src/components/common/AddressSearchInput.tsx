@@ -100,19 +100,33 @@ const AddressSearchInput: React.FC<Props> = ({
     }
   };
 
-  // Suggestions me exact address na mile to user apna typed address hi use
-  // kare: geocode se map ka approximate center nikalo, pin user khud rakhega.
-  const handleUseTypedAddress = async () => {
+  // Input ke andar wala 📌 pin button — exact location ka ek hi raasta.
+  // Pehle ye kaam input ke NEECHE alag boxes karte the ("Yahi address use
+  // karo" / confirmed chip) — suggestions ki dropdown unhe dhak deti thi,
+  // isliye user exact location select hi nahi kar pata tha. Ab trigger input
+  // ke andar hai — list se kabhi nahi dhakta.
+  // Location pehle se confirm hai to wahin se map kholo; warna typed address
+  // geocode karo, na mile to bias/GPS se approximate center — pin user rakhega.
+  const handlePinPress = async () => {
+    Vibration.vibrate(40);
+    Keyboard.dismiss();
+    if (confirmed) {
+      openMapAt(confirmed.coords, confirmed.address);
+      return;
+    }
     const text = typedText.trim();
-    if (!text) return;
     setGeoLoading(true);
     try {
-      const geo = await forwardGeocode(text);
-      const center = geo?.coordinates || biasCoords || (await getQuickPosition());
+      let center: Coordinates | null = null;
+      if (text.length >= 3) {
+        const geo = await forwardGeocode(text);
+        center = geo?.coordinates || null;
+      }
+      if (!center) center = biasCoords || (await getQuickPosition());
       if (!center) {
         Alert.alert(
           'Location Nahi Mili',
-          'Is address ka area nahi mila. Koi paas ka landmark search karo ya GPS use karo — phir map par pin lagao.',
+          'Pehle address type karo ya paas ka landmark search karo — phir 📌 daba ke map par pin lagao.',
         );
         return;
       }
@@ -121,9 +135,6 @@ const AddressSearchInput: React.FC<Props> = ({
       setGeoLoading(false);
     }
   };
-
-  // minLength (3) se match — warna list to khul jaati hai par button nahi.
-  const showUseTypedBtn = typedText.trim().length >= 3 && !confirmed;
 
   return (
     <View style={styles.wrapper}>
@@ -142,7 +153,7 @@ const AddressSearchInput: React.FC<Props> = ({
               // user atak jaata tha; typed-address fallback ka raasta batao.
               Alert.alert(
                 'Location Load Nahi Hui',
-                'Internet check karke dobara try karo, ya "Yahi address use karo" daba ke map par pin lagao.',
+                'Internet check karke dobara try karo, ya 📌 daba ke map par pin lagao.',
               );
               return;
             }
@@ -179,35 +190,28 @@ const AddressSearchInput: React.FC<Props> = ({
           debounce={300}
           minLength={3}
         />
-      </View>
 
-      {/* Selection status: pin confirmed -> green chip (tap = adjust) */}
-      {confirmed ? (
+        {/* 📌 Exact location — map pin-confirm kholta hai (Porter/Dunzo style) */}
         <TouchableOpacity
-          style={styles.confirmedChip}
-          onPress={() => openMapAt(confirmed.coords, confirmed.address)}
-          activeOpacity={0.75}>
-          <Text style={styles.confirmedIcon}>📌</Text>
-          <Text style={styles.confirmedText} numberOfLines={1}>
-            Exact location set hai — badalne ke liye tap karo
-          </Text>
-        </TouchableOpacity>
-      ) : showUseTypedBtn ? (
-        <TouchableOpacity
-          style={styles.useTypedBtn}
-          onPress={handleUseTypedAddress}
+          style={[styles.pinBtn, confirmed && styles.pinBtnActive]}
+          onPress={handlePinPress}
           disabled={geoLoading}
-          activeOpacity={0.75}>
+          activeOpacity={0.7}
+          accessibilityLabel="Exact location map par pin karo">
           {geoLoading ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (
-            <Text style={styles.gpsIcon}>🗺️</Text>
+            <Text style={styles.pinBtnIcon}>📌</Text>
           )}
-          <Text style={styles.useTypedText} numberOfLines={1}>
-            {geoLoading ? 'Address dhoondh rahe hain...' : 'Yahi address use karo — map par pin lagao'}
-          </Text>
         </TouchableOpacity>
-      ) : null}
+      </View>
+
+      {/* Pin confirmed — chhota sa status, koi alag box nahi */}
+      {confirmed && (
+        <Text style={styles.confirmedNote} numberOfLines={1}>
+          ✓ Exact location set hai — badalne ke liye 📌 dabao
+        </Text>
+      )}
 
       {/* GPS button — separate row below input to avoid touch conflicts */}
       {showCurrentLocation && (
@@ -265,10 +269,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, borderRadius: 12,
     marginTop: 2, elevation: 10, zIndex: 9999,
-    // top 96: "Yahi address use karo" button (input ke turant neeche) hamesha
-    // dikhta/tappable rahe — list usko dhak deti thi to exact-address ka
-    // primary raasta hi band ho jaata tha.
-    position: 'absolute', top: 96, left: -36, right: 0,
+    // Exact-location ka trigger ab input ke ANDAR (📌 button) hai — neeche
+    // koi button nahi jise list dhak sake, isliye list input ke turant neeche.
+    // left -36 = left icon ki width, right -43 = 📌 button (38 + 5 margin).
+    position: 'absolute', top: 48, left: -36, right: -43,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12, shadowRadius: 12,
   },
@@ -276,34 +280,25 @@ const styles = StyleSheet.create({
   listDesc: { fontSize: 13, color: COLORS.text },
   separator: { height: 1, backgroundColor: COLORS.border },
 
-  confirmedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.success + '60',
+  // Input ke andar wala 📌 exact-location button — confirm hone par green.
+  pinBtn: {
+    width: 38, height: 34,
+    marginTop: 5, marginRight: 5,
+    borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.primaryBg,
+    borderWidth: 1, borderColor: COLORS.primary + '40',
+  },
+  pinBtnActive: {
     backgroundColor: COLORS.successBg,
+    borderColor: COLORS.success + '60',
   },
-  confirmedIcon: { fontSize: 14 },
-  confirmedText: { fontSize: 12.5, fontWeight: '600', color: COLORS.success, flex: 1 },
+  pinBtnIcon: { fontSize: 15 },
 
-  useTypedBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.warning + '60',
-    backgroundColor: COLORS.warningBg,
+  confirmedNote: {
+    fontSize: 11.5, fontWeight: '600', color: COLORS.success,
+    marginTop: 5, marginLeft: 2,
   },
-  useTypedText: { fontSize: 12.5, fontWeight: '600', color: COLORS.warning, flex: 1 },
 
   gpsBtn: {
     flexDirection: 'row',
