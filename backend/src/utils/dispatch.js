@@ -13,6 +13,9 @@ const TIERS = [
 ];
 // 4:30 (270s) tak bhi koi rider na le to customer ko "rider uplabdh nahi" bata do.
 const NO_RIDER_MS = 270000;
+// Aakhri tier ka radius — isse door (ya isse pehle ki tier me unknown-location)
+// rider ko order kabhi nahi jaana chahiye.
+const MAX_RADIUS_KM = TIERS[TIERS.length - 1].radiusKm;
 
 // orderId(string) -> { timers: NodeJS.Timeout[], notified: Set<riderId>,
 //   declined: Set<riderId>, tierIdx, ctx: { io, onlineRiders, id, pickup, payload } }
@@ -27,20 +30,20 @@ const cancelDispatch = (orderId) => {
   active.delete(id);
 };
 
-// Itni purani location ko bharosemand mat maano — rider shayad kahin aur hai
-// (ya uska GPS/location bhejna band ho gaya hai).
-const LOC_FRESH_MS = 10 * 60 * 1000;
-
 // Notify on-duty riders within `radiusKm` of pickup who haven't been pinged yet.
 // Duty ka source DB ka isOnline flag hai, socket connection NAHI — screen lock/
 // app background me socket toot jaata hai par rider duty par hi hota hai.
 // Har eligible rider ko: socket (app khuli ho to live ring) + FCM push
 // (lock screen / background / app band — notification sound ke saath).
 //
-// ZAROORI: loop SAB online riders par hai, sirf location wale par nahi. Jis
-// rider ki location missing/purani hai (permission deny, GPS band, POST fail)
-// use door maan ke chhodna nahi — pehli tier se hi bhej do. Warna woh rider
-// online hoke bhi kabhi order nahi dekhta (10-phone field test me yahi hua).
+// Doori HAMESHA last-known location se naapi jaati hai — purani ho tab bhi.
+// Pehle stale/missing location par radius filter skip hota tha ("paas hoga"
+// maan ke pehli tier se bhej do) — nateeja: 5km+ door ke riders ko bhi order
+// ring ho raha tha. Ab 5km ke bahar (last-known ke hisaab se) kabhi nahi jaata.
+// Jis rider ka location record HI nahi (permission deny, GPS band, POST kabhi
+// nahi hua) use bilkul chhod bhi nahi sakte — warna woh online hoke bhi kabhi
+// order nahi dekhta (10-phone field test me yahi hua). Aise rider ko sirf
+// aakhri (5km) tier me bhejo: paas walon ko pehla mauka, par yeh bhi anokha nahi.
 const notifyTier = async (io, onlineRiders, { id, pickup, payload }, radiusKm, entry) => {
   // Order abhi bhi pending hai? warna ruk jao.
   const fresh = await Order.findById(id).select('status');
@@ -58,12 +61,12 @@ const notifyTier = async (io, onlineRiders, { id, pickup, payload }, radiusKm, e
     if (entry.notified.has(rid)) return;                 // pehle hi ping kar diya
 
     const loc = locByRider.get(rid);
-    const locFresh = loc && (Date.now() - new Date(loc.updatedAt).getTime()) <= LOC_FRESH_MS;
-    if (locFresh) {
+    if (loc) {
       const km = haversineKm(pickup.lat, pickup.lng, loc.lat, loc.lng);
-      if (km > radiusKm) return;                         // pakka door hai — is tier me nahi
+      if (km > radiusKm) return;                         // door hai — is tier me nahi (5km+ kabhi nahi)
+    } else if (radiusKm < MAX_RADIUS_KM) {
+      return;                                            // location record hi nahi — sirf aakhri tier me
     }
-    // (location missing/purani -> radius filter skip, rider ko bhejo)
 
     const socketId = onlineRiders.get(rid);
     const fcmToken = rider.fcmToken;
