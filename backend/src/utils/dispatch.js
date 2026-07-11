@@ -127,11 +127,15 @@ const dispatchOrder = (io, onlineRiders, { orderId, pickup, payload }) => {
 };
 
 // Rider ne order thukra diya (app ka Decline button / notification action).
-// Tier ka timer 90s ka hai — par jab AB TAK ping kiye gaye SAB riders mana
-// kar chuke hon to intezaar bekaar hai: agli tier turant fire karo. Nayi
-// tier bhi koi naya rider na de (aur sab declined hi rahen) to cascade
-// karke aage badho; aakhri tier ke baad customer ko "rider uplabdh nahi"
-// foran bata do — 4:30 ka intezaar nahi.
+// Decline sirf USI rider ke liye order hataata hai — baaki riders aur customer
+// ki search par koi asar nahi. Tier ka timer 90s ka hai — par jab AB TAK ping
+// kiye gaye SAB riders mana kar chuke hon to intezaar bekaar hai: agli tier
+// turant fire karo (zyada riders tak pahuncho).
+// ZAROORI: decline se search kabhi KHATAM nahi hoti. Pehle aakhri tier ke baad
+// yahin se turant no-rider bhej dete the — nateeja: paas ka akela rider decline
+// kare to customer ko foran "Order Again" dikh jaata tha jabki 4:30 ka window
+// abhi baaki tha (naye riders online ho sakte the / location update aa sakti
+// thi). Ab "rider uplabdh nahi" SIRF NO_RIDER_MS (4:30) wala timer bhejta hai.
 // (Tier ke original timers chalte rehte hain — notifyTier `notified` ki wajah
 // se idempotent hai, aur baad me online hue naye riders ko pakad leta hai.)
 const registerDecline = async (orderId, riderId) => {
@@ -152,8 +156,10 @@ const registerDecline = async (orderId, riderId) => {
 
     const nextIdx = entry.tierIdx + 1;
     if (nextIdx >= TIERS.length) {
-      console.log(`[DISPATCH] ${id}: sab riders ne decline kiya, tiers khatam — no-rider abhi`);
-      await notifyNoRider(io, id);
+      // Sab tiers fire ho chuki hain — bas. Search chalti rahegi: original
+      // tier timers naye/reconnect hue riders pakadte rahenge, aur no-rider
+      // ka faisla sirf 4:30 wala NO_RIDER_MS timer karega.
+      console.log(`[DISPATCH] ${id}: sab notified riders ne decline kiya, tiers khatam — search 4:30 tak jaari`);
       return;
     }
     entry.tierIdx = nextIdx;
