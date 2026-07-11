@@ -20,6 +20,14 @@ type Route = RouteProp<CustomerStackParamList, 'LiveTracking'>;
 
 // Rider dhoondhne ka total window: 1km + 3km + 5km, har tier 1:30 min = 4:30 total.
 const SEARCH_TOTAL_MS = 270000;
+// Backend ke dispatch tiers ke saath sync — har 1:30 me daayra badhta hai.
+// Search card ke neeche wali tier line inhi rangon me bharti hai.
+const TIER_MS = 90000;
+const SEARCH_TIERS = [
+  { km: 1, color: COLORS.success },
+  { km: 3, color: COLORS.warning },
+  { km: 5, color: COLORS.error },
+];
 
 // Live rider marker with a pulsing "ping" ring — professional tracking feel.
 const LiveRiderMarker = () => {
@@ -126,6 +134,20 @@ const LiveTrackingScreen = () => {
   const searchProgress = useRef(new Animated.Value(0)).current;
 
   const searching = !!order && order.status === 'pending' && !noRider;
+  // Rider assign hone tak order-info sheet 70% screen leti hai (map ~30%);
+  // tracking shuru hote hi map ko wapas poori jagah mil jaati hai.
+  const tallSheet = searching || noRider;
+
+  // Tier ticker: har second elapsed update — 1:30 par tier line ka rang/segment badalta hai.
+  const [searchElapsed, setSearchElapsed] = useState(0);
+  useEffect(() => {
+    if (!searching || !searchStart) return;
+    const tick = () => setSearchElapsed(Math.max(0, Date.now() - searchStart));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [searching, searchStart]);
+  const tierIdx = Math.min(SEARCH_TIERS.length - 1, Math.floor(searchElapsed / TIER_MS));
 
   useEffect(() => {
     let mounted = true;
@@ -190,14 +212,16 @@ const LiveTrackingScreen = () => {
       .map(c => ({ latitude: c.lat, longitude: c.lng }));
     if (pts.length === 0) return;
     // Map mount/layout hone ka thoda wait — warna fitToCoordinates ignore ho jaata hai.
+    // Search ke waqt map sirf ~30% screen hota hai — bade paddings (110/340)
+    // map ki height se zyada ho jaate hain aur fit hi nahi hota.
+    const pad = tallSheet
+      ? { top: 40, right: 40, bottom: 40, left: 40 }
+      : { top: 110, right: 60, bottom: 340, left: 60 };
     const t = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(pts, {
-        edgePadding: { top: 110, right: 60, bottom: 340, left: 60 },
-        animated: true,
-      });
+      mapRef.current?.fitToCoordinates(pts, { edgePadding: pad, animated: true });
     }, 500);
     return () => clearTimeout(t);
-  }, [order?._id, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng, hasRiderFix]);
+  }, [order?._id, order?.delivery.coordinates.lat, order?.delivery.coordinates.lng, hasRiderFix, tallSheet]);
 
   // Draw the live road route rider → current target (pickup before pickup,
   // delivery after) as a blue Polyline + distance/ETA. Uses the shared
@@ -490,8 +514,8 @@ const LiveTrackingScreen = () => {
         <Text style={styles.recenterIcon}>🎯</Text>
       </TouchableOpacity>
 
-      {/* Bottom Sheet */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomSheet}>
+      {/* Bottom Sheet — rider search ke waqt 70% screen (map ~30%), baad me compact */}
+      <SafeAreaView edges={['bottom']} style={[styles.bottomSheet, tallSheet && styles.bottomSheetTall]}>
         {order ? (
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.sheetHeader}>
@@ -527,10 +551,30 @@ const LiveTrackingScreen = () => {
                 <Text style={styles.searchTitle}>🔍 Rider dhoondh rahe hain…</Text>
                 <Text style={styles.searchSub}>
                   {nearbyRiders.length > 0
-                    ? `${nearbyRiders.length} rider aas-paas (5km) — request bheji ja rahi hai`
+                    ? `${nearbyRiders.length} rider aas-paas hain (5 km ke andar)`
                     : 'Aas-paas ke riders ko request bheji ja rahi hai'}
                 </Text>
                 <SearchWaveBar progress={searchProgress} />
+
+                {/* Tier line: har 1:30 me daayra badhta hai — 1km green, 3km yellow, 5km red */}
+                <View style={styles.tierRow}>
+                  {SEARCH_TIERS.map((t, i) => {
+                    const pct = i < tierIdx ? 1
+                      : i > tierIdx ? 0
+                      : Math.min(1, (searchElapsed - i * TIER_MS) / TIER_MS);
+                    return (
+                      <View key={t.km} style={styles.tierSeg}>
+                        <View style={styles.tierTrack}>
+                          <View style={[styles.tierFill, { width: `${pct * 100}%`, backgroundColor: t.color }]} />
+                        </View>
+                        <Text style={[styles.tierLabel, i === tierIdx && { color: t.color }]}>{t.km} km</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.tierHint, { color: SEARCH_TIERS[tierIdx].color }]}>
+                  Abhi {SEARCH_TIERS[tierIdx].km} km ke daayre me rider dhoondh rahe hain
+                </Text>
               </View>
             )}
 
@@ -794,6 +838,17 @@ const styles = StyleSheet.create({
     borderRadius: 4, backgroundColor: COLORS.primary,
   },
 
+  // Tier line — 1km/3km/5km segments, har segment 1:30 ka (green/yellow/red)
+  tierRow:   { flexDirection: 'row', gap: 6, marginTop: 12 },
+  tierSeg:   { flex: 1 },
+  tierTrack: { height: 4, borderRadius: 2, backgroundColor: COLORS.border, overflow: 'hidden' },
+  tierFill:  { height: 4, borderRadius: 2 },
+  tierLabel: {
+    fontSize: 10.5, fontWeight: '700', color: COLORS.textLight,
+    marginTop: 4, textAlign: 'center',
+  },
+  tierHint:  { fontSize: 11.5, fontWeight: '700', marginTop: 8 },
+
   // No rider state
   noRiderCard: {
     backgroundColor: COLORS.surface2, borderRadius: 14, padding: 18, marginBottom: 12,
@@ -881,6 +936,8 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 10,
   },
+  // Rider search ke waqt: order info 70%, map ~30% — search khatam hote hi normal.
+  bottomSheetTall: { height: '70%', maxHeight: '70%' },
   sheetHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     marginBottom: 16,
