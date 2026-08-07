@@ -10,10 +10,13 @@ import { fetchRoute } from '../../services/routeService';
 import Card         from '../../components/common/Card';
 import Button       from '../../components/common/Button';
 import ScreenHeader from '../../components/navigation/ScreenHeader';
-import { createOrder } from '../../services/orderService';
+import { createOrder, createOrderPaymentOrder, verifyOrderPayment } from '../../services/orderService';
+import { openRazorpayCheckout, isUserCancelled } from '../../services/razorpayCheckout';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
+import useAppSelector from '../../hooks/useAppSelector';
 import { setActiveOrder, prependOrder } from '../../store/slices/orderSlice';
 import { formatCurrency, formatDistance, truncateAddress } from '../../utils/formatters';
+import { Order } from '../../types';
 
 type Route = RouteProp<CustomerStackParamList, 'FareEstimate'>;
 
@@ -21,10 +24,16 @@ const FareEstimateScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
   const route      = useRoute<Route>();
   const dispatch   = useAppDispatch();
-  const { pickup, delivery, parcel, estimate } = route.params;
+  const profile    = useAppSelector(s => s.auth.profile);
+  const { pickup, delivery, parcel, estimate, paymentMethod } = route.params;
+  const isOnlinePayment = paymentMethod === 'ONLINE';
 
   const mapRef = useRef<MapView>(null);
   const [loading,       setLoading]       = useState(false);
+  const [payLoading,    setPayLoading]    = useState(false);
+  // ONLINE order pehle hi create ho chuka par payment abhi baaki/cancel ho gayi —
+  // isse hold karke rakhte hain taaki retry par order dobara na bane.
+  const [pendingOrder,  setPendingOrder]  = useState<Order | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [routeCoords,   setRouteCoords]   = useState<{ latitude: number; longitude: number }[]>([]);
@@ -50,13 +59,53 @@ const FareEstimateScreen = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // Order create hone ke baad Razorpay checkout kholo. Order khud FareEstimate
+  // screen par hi navigate nahi karta jab tak payment verify na ho jaaye —
+  // taaki bina-paid order dispatch na ho (backend bhi COD/paid check karta hai).
+  const payForOrder = async (order: Order) => {
+    try {
+      setPayLoading(true);
+      const rzpOrder = await createOrderPaymentOrder(order._id);
+      const result = await openRazorpayCheckout(
+        rzpOrder,
+        `Order #${order.orderId}`,
+        { name: profile?.name, email: profile?.email, contact: profile?.phone },
+      );
+      const verified = await verifyOrderPayment(order._id, {
+        razorpay_order_id:   result.razorpay_order_id,
+        razorpay_payment_id: result.razorpay_payment_id,
+        razorpay_signature:  result.razorpay_signature,
+      });
+      dispatch(setActiveOrder(verified));
+      navigation.navigate('LiveTracking', { orderId: verified._id });
+    } catch (e: any) {
+      if (isUserCancelled(e)) {
+        Alert.alert('Payment Cancel Ho Gaya', 'Order abhi bhi pending hai — "Pay Now" dabakar dobara try karein.');
+      } else {
+        Alert.alert('Payment Fail Ho Gayi', e.message || 'Kuch galat ho gaya. Dobara try karein.');
+      }
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
   const handleConfirm = async () => {
+    // ONLINE ka order pehle hi ban chuka (payment sirf retry ho rahi hai) —
+    // dobara createOrder mat bulao, warna duplicate order ban jaayega.
+    if (pendingOrder) return payForOrder(pendingOrder);
+
     try {
       setLoading(true);
-      const order = await createOrder({ pickup, delivery, parcel });
-      dispatch(setActiveOrder(order));
+      const order = await createOrder({ pickup, delivery, parcel, paymentMethod });
       dispatch(prependOrder(order));
-      navigation.navigate('LiveTracking', { orderId: order._id });
+
+      if (isOnlinePayment) {
+        setPendingOrder(order);
+        await payForOrder(order);
+      } else {
+        dispatch(setActiveOrder(order));
+        navigation.navigate('LiveTracking', { orderId: order._id });
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -150,9 +199,17 @@ const FareEstimateScreen = () => {
           <Text style={styles.fareHeroLabel}>Estimated Fare</Text>
           <Text style={styles.fareHeroAmount}>{formatCurrency(estimate.estimated)}</Text>
           <Text style={styles.fareHeroSub}>
-            Cash on Delivery · {formatDistance(estimate.distance)}
+            {isOnlinePayment ? 'Pay Online' : 'Cash on Delivery'} · {formatDistance(estimate.distance)}
           </Text>
         </View>
+
+        {pendingOrder && (
+          <View style={styles.pendingNote}>
+            <Text style={styles.pendingNoteText}>
+              ⚠️ Order #{pendingOrder.orderId} ban chuka hai, payment abhi baaki hai. "Pay Now" dabakar complete karein.
+            </Text>
+          </View>
+        )}
 
         {/* Route Card */}
         <Card>
@@ -227,9 +284,9 @@ const FareEstimateScreen = () => {
         </View>
 
         <Button
-          title="Confirm & Place Order"
+          title={pendingOrder ? 'Pay Now' : isOnlinePayment ? 'Pay & Place Order' : 'Confirm & Place Order'}
           onPress={handleConfirm}
-          loading={loading}
+          loading={loading || payLoading}
           style={{ marginBottom: 10 }}
         />
         <View style={{ height: 16 }} />
@@ -281,6 +338,12 @@ const styles = StyleSheet.create({
   fareHeroSub:    { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 6 },
 
   cardTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 14, letterSpacing: 0.2 },
+
+  pendingNote: {
+    backgroundColor: COLORS.warningBg, borderRadius: 12, padding: 12,
+    marginBottom: 16, borderLeftWidth: 3, borderLeftColor: COLORS.warning,
+  },
+  pendingNoteText: { fontSize: 12, color: COLORS.warning, lineHeight: 17, fontWeight: '600' },
 
   routeWrap:     { gap: 0 },
   routeRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },

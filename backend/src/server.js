@@ -26,6 +26,13 @@ const { onlineRiders } = registerSocketHandlers(io);
 app.use((req, _res, next) => { req.io = io; req.onlineRiders = onlineRiders; next(); });
 
 app.use(helmet());
+
+// Razorpay webhook signature verify raw request bytes par hoti hai — is route
+// ko express.json() se PEHLE raw Buffer body do, taaki JSON parser ise consume
+// (aur reshape) na kare. body-parser dono ek hi request par khud ko skip karta
+// hai jab body already parsed ho.
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

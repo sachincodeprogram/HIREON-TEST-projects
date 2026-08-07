@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import auth from '@react-native-firebase/auth';
 import Sound from 'react-native-sound';
 import { COLORS } from '../../constants/api';
+import { RiderStackParamList } from '../../navigation/types';
 import useAppSelector from '../../hooks/useAppSelector';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { clearAuth, setProfile } from '../../store/slices/authSlice';
@@ -18,6 +21,7 @@ import { getSavedRingtoneId, saveRingtoneId } from '../../services/ringtoneServi
 Sound.setCategory('Playback');
 
 const RiderProfileScreen = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RiderStackParamList>>();
   const dispatch = useAppDispatch();
   const profile  = useAppSelector(s => s.auth.profile);
   const earnings = useAppSelector(s => s.rider.earnings);
@@ -150,6 +154,20 @@ const RiderProfileScreen = () => {
           </View>
         </View>
 
+        {/* Wallet */}
+        <View style={styles.section}>
+          <Card onPress={() => navigation.navigate('Wallet')} style={styles.walletRow}>
+            <View style={styles.walletIconChip}>
+              <Text style={styles.walletIconText}>👛</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.walletTitle}>My Wallet</Text>
+              <Text style={styles.walletSub}>Balance, recharge & transaction history</Text>
+            </View>
+            <Text style={styles.walletArrow}>›</Text>
+          </Card>
+        </View>
+
         {/* Profile Info */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
@@ -276,6 +294,16 @@ const styles = StyleSheet.create({
   editBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.secondary },
 
   editActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+
+  walletRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  walletIconChip: {
+    width: 44, height: 44, borderRadius: 14, backgroundColor: COLORS.secondaryBg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  walletIconText: { fontSize: 20 },
+  walletTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
+  walletSub:   { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  walletArrow: { fontSize: 26, color: COLORS.textLight, fontWeight: '300' },
 
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

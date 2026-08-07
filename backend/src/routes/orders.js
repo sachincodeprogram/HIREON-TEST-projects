@@ -4,6 +4,8 @@ const { protect, requireRole } = require('../middleware/auth');
 
 router.post('/estimate',         protect, ctrl.estimateFare);
 router.post('/',                 protect, requireRole('customer'), ctrl.createOrder);
+router.post('/:id/pay/order',    protect, requireRole('customer'), ctrl.createOrderPaymentOrder);
+router.post('/:id/pay/verify',   protect, requireRole('customer'), ctrl.verifyOrderPayment);
 router.get('/',                  protect, ctrl.getOrders);
 router.get('/pending',           protect, requireRole('rider'),    ctrl.getPendingOrders);
 router.get('/:id',               protect, ctrl.getOrder);

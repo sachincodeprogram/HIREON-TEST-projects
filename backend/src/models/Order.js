@@ -49,6 +49,14 @@ const orderSchema = new mongoose.Schema({
   pickupOtp:   { type: String, default: '' },
   deliveryOtp: { type: String, default: '' },
 
+  // COD (default) = customer cash rider ko deta hai, delivery par commission
+  // rider ke wallet se debit hoti hai. ONLINE = Razorpay se pehle hi collect
+  // hota hai, delivery par (fare - commission) rider ke wallet me credit hoti hai.
+  paymentMethod: { type: String, enum: ['COD', 'ONLINE'], default: 'COD' },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
+  razorpayOrderId:   { type: String, default: '' },
+  razorpayPaymentId: { type: String, default: '' },
+
   timeline:    [timelineSchema],
 
   // Customer ki rating (delivery ke baad, ek hi baar) — rider ke aggregate me

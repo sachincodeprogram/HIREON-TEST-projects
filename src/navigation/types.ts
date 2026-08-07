@@ -1,4 +1,4 @@
-import { FareEstimate, LocationInfo, ParcelInfo } from '../types';
+import { FareEstimate, LocationInfo, ParcelInfo, PaymentMethod } from '../types';
 
 export type RootStackParamList = {
   Splash:   undefined;
@@ -22,7 +22,7 @@ export type CustomerTabParamList = {
 
 export type CustomerStackParamList = {
   CustomerTabs:  undefined;
-  FareEstimate:  { pickup: LocationInfo; delivery: LocationInfo; parcel: ParcelInfo; estimate: FareEstimate };
+  FareEstimate:  { pickup: LocationInfo; delivery: LocationInfo; parcel: ParcelInfo; estimate: FareEstimate; paymentMethod: PaymentMethod };
   LiveTracking:  { orderId: string };
 };
 
@@ -36,6 +36,7 @@ export type RiderTabParamList = {
 export type RiderStackParamList = {
   RiderTabs:      undefined;
   ActiveDelivery: { orderId: string };
+  Wallet:         undefined;
   Navigation: {
     orderId:            string;
     destination:        { lat: number; lng: number };

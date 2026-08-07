@@ -17,6 +17,7 @@ import { fetchRoute } from '../../services/routeService';
 import apiClient from '../../services/apiClient';
 import Button       from '../../components/common/Button';
 import StatusBadge  from '../../components/common/StatusBadge';
+import SwipeToConfirm from '../../components/common/SwipeToConfirm';
 import ScreenHeader from '../../components/navigation/ScreenHeader';
 import { Order, Coordinates, UserProfile } from '../../types';
 import { formatCurrency, truncateAddress } from '../../utils/formatters';
@@ -103,6 +104,9 @@ const ActiveDeliveryScreen = () => {
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [showPickupBanner, setShowPickupBanner] = useState(false);
+  // COD order: OTP verify hone ke baad seedha delivered mark nahi karte —
+  // pehle "cash received" swipe card dikhao (commission usi swipe se cut hoti hai).
+  const [showCashCard, setShowCashCard] = useState(false);
   const locationWatchId = useRef<number | null>(null);
   const lastRouteOrigin = useRef<Coordinates | null>(null);
   const lastRouteTarget = useRef<Coordinates | null>(null);
@@ -293,26 +297,42 @@ const ActiveDeliveryScreen = () => {
     }
   };
 
-  const handleDeliveryConfirm = async () => {
-    if (!withinRange) {
-      return Alert.alert('Delivery Se Door Ho', 'OTP daalne ke liye delivery location ke 100m ke andar aao.');
-    }
-    if (!otp || otp.length !== 4) {
-      return Alert.alert('OTP Galat Hai', 'Customer se 4-digit OTP lo aur enter karo.');
-    }
+  // Asli deliver-otp API call — dono raaste (ONLINE direct button, COD swipe
+  // card) yahin se guzarte hain. Error par rethrow karta hai taaki SwipeToConfirm
+  // thumb wapas 0 par spring ho jaaye (galat OTP par retry ka mauka mile).
+  const doConfirmDelivery = async () => {
     try {
       setLoading(true);
       const updated = await confirmDelivery(orderId, otp);
       setOrder(updated);
       setOtp('');
+      setShowCashCard(false);
       if (locationWatchId.current !== null) {
         Geolocation.clearWatch(locationWatchId.current);
         locationWatchId.current = null;
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
+      throw e;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeliveryConfirm = () => {
+    if (!withinRange) {
+      return Alert.alert('Delivery Se Door Ho', 'OTP daalne ke liye delivery location ke 100m ke andar aao.');
+    }
+    if (!otp || otp.length !== 4) {
+      return Alert.alert('OTP Galat Hai', 'Customer se 4-digit OTP lo aur enter karo.');
+    }
+    if (order?.paymentMethod === 'COD') {
+      // COD: OTP already verify ho chuka (range + length) — ab cash-received
+      // card dikhao, actual delivered-mark + commission cut swipe par hoga.
+      setShowCashCard(true);
+    } else {
+      // ONLINE: fare pehle hi collect ho chuka — seedha complete karo, koi cash lena nahi.
+      doConfirmDelivery().catch(() => {});
     }
   };
 
@@ -576,7 +596,7 @@ const ActiveDeliveryScreen = () => {
             )}
 
             {/* OTP Section - Delivery */}
-            {isDelivery && (
+            {isDelivery && !showCashCard && (
               <View style={[styles.otpSection, { borderColor: COLORS.primary + '60' }]}>
                 <View style={styles.otpHeader}>
                   <Text style={styles.otpIcon}>🔑</Text>
@@ -598,6 +618,35 @@ const ActiveDeliveryScreen = () => {
                   disabled={!withinRange}
                   variant="primary"
                   style={{ marginTop: 4 }}
+                />
+              </View>
+            )}
+
+            {/* COD: OTP verify ho gaya — ab cash-received card, delivered-mark
+                aur commission cut isi swipe se hote hain. */}
+            {isDelivery && showCashCard && order && (
+              <View style={[styles.otpSection, { borderColor: COLORS.success + '60' }]}>
+                <View style={styles.otpHeader}>
+                  <Text style={styles.otpIcon}>💵</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.otpTitle}>Cash Collect Karo</Text>
+                    <Text style={styles.otpHint}>Customer se pura amount cash me lo</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowCashCard(false)} hitSlop={10} disabled={loading}>
+                    <Text style={styles.cashCardBack}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.cashAmountBox}>
+                  <Text style={styles.cashAmountLabel}>Customer Se Lena Hai</Text>
+                  <Text style={styles.cashAmountValue}>
+                    {formatCurrency(order.fare.final || order.fare.estimated)}
+                  </Text>
+                </View>
+                <SwipeToConfirm
+                  label="Swipe → Cash Mil Gaya"
+                  confirmingLabel="Confirm ho raha hai…"
+                  color={COLORS.success}
+                  onConfirm={doConfirmDelivery}
                 />
               </View>
             )}
@@ -746,6 +795,13 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: COLORS.success + '40',
   },
   otpHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  cashCardBack: { fontSize: 18, color: COLORS.textMuted, fontWeight: '700', padding: 4 },
+  cashAmountBox: {
+    backgroundColor: COLORS.successBg, borderRadius: 14, padding: 16, marginBottom: 16,
+    alignItems: 'center', borderWidth: 1, borderColor: COLORS.success + '30',
+  },
+  cashAmountLabel: { fontSize: 12, color: COLORS.success, fontWeight: '700', marginBottom: 4 },
+  cashAmountValue: { fontSize: 32, fontWeight: '900', color: COLORS.success },
   otpIcon:   { fontSize: 28 },
   otpTitle:  { fontSize: 16, fontWeight: '800', color: COLORS.text },
   otpHint:   { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },

@@ -35,6 +35,9 @@ export interface FareInfo {
   distance: number;
 }
 
+export type PaymentMethod = 'COD' | 'ONLINE';
+export type PaymentStatus = 'pending' | 'paid' | 'failed';
+
 export interface TimelineItem {
   status: OrderStatus;
   note: string;
@@ -73,6 +76,10 @@ export interface Order {
   deliveryOtp?: string;
   timeline: TimelineItem[];
   riderEarning: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   /** Customer ki 1-5 star rating (delivery ke baad); 0/undefined = abhi nahi di */
   rating?: number;
   review?: string;
@@ -99,4 +106,31 @@ export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data: T;
+}
+
+// Rider wallet — balance in paise (₹1 = 100 paise), matches backend exactly
+// so no rounding drift ever creeps in between app and server.
+export interface Wallet {
+  balance: number;
+  minBalance: number;
+  canAcceptCOD: boolean;
+}
+
+export type WalletTransactionType = 'EARNING' | 'COMMISSION_DEBIT' | 'RECHARGE' | 'REFUND';
+
+export interface WalletTransaction {
+  _id: string;
+  type: WalletTransactionType;
+  amount: number;
+  balanceAfter: number;
+  order?: { _id: string; orderId: string } | string | null;
+  description: string;
+  createdAt: string;
+}
+
+export interface RazorpayOrder {
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
 }

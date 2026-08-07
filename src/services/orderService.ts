@@ -1,10 +1,11 @@
 import apiClient from './apiClient';
-import { Order, FareEstimate, LocationInfo, ParcelInfo } from '../types';
+import { Order, FareEstimate, LocationInfo, ParcelInfo, PaymentMethod, RazorpayOrder } from '../types';
 
 interface CreateOrderPayload {
   pickup: LocationInfo;
   delivery: LocationInfo;
   parcel: ParcelInfo;
+  paymentMethod: PaymentMethod;
 }
 
 interface EstimatePayload {
@@ -20,6 +21,23 @@ export const estimateFare = async (payload: EstimatePayload): Promise<FareEstima
 
 export const createOrder = async (payload: CreateOrderPayload): Promise<Order> => {
   const { data } = await apiClient.post('/orders', payload);
+  return data.data;
+};
+
+// ONLINE order ke liye Razorpay order banao — customer isse checkout kholta hai.
+export const createOrderPaymentOrder = async (orderId: string): Promise<RazorpayOrder> => {
+  const { data } = await apiClient.post(`/orders/${orderId}/pay/order`);
+  return data.data;
+};
+
+interface VerifyPaymentPayload {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export const verifyOrderPayment = async (orderId: string, payload: VerifyPaymentPayload): Promise<Order> => {
+  const { data } = await apiClient.post(`/orders/${orderId}/pay/verify`, payload);
   return data.data;
 };
 

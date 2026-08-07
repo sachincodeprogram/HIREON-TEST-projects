@@ -428,8 +428,19 @@ const RiderDashboard = () => {
       setRingOrder(null);
       navigation.navigate('ActiveDelivery', { orderId: accepted._id });
     } catch (e: any) {
-      // Order kisi aur rider ne le liya / cancel ho gaya — bata do.
-      Alert.alert('Order Gaya', e.message || 'Yeh order ab available nahi hai.');
+      const message = e.message || 'Yeh order ab available nahi hai.';
+      // Backend wallet floor se neeche COD accept reject karta hai (order
+      // "kisi aur ne le liya" wala generic error nahi) — is case me rider ko
+      // seedha Wallet screen par recharge karne ka rasta do.
+      if (/wallet recharge/i.test(message)) {
+        Alert.alert('Wallet Recharge Chahiye', message, [
+          { text: 'Baad Me', style: 'cancel' },
+          { text: 'Wallet Recharge Karo', onPress: () => navigation.navigate('Wallet') },
+        ]);
+      } else {
+        // Order kisi aur rider ne le liya / cancel ho gaya — bata do.
+        Alert.alert('Order Gaya', message);
+      }
       setRingOrder(null);
     } finally {
       setAccepting(null);
@@ -513,6 +524,12 @@ const RiderDashboard = () => {
                 <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
                 <Text style={styles.subGreeting}>Ready to deliver today?</Text>
               </View>
+              <TouchableOpacity
+                style={styles.walletBtn}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('Wallet')}>
+                <Text style={styles.walletBtnIcon}>👛</Text>
+              </TouchableOpacity>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{firstName[0].toUpperCase()}</Text>
               </View>
@@ -741,6 +758,14 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
   },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  walletBtn: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
+    marginRight: SPACING.sm,
+  },
+  walletBtnIcon: { fontSize: 20 },
 
   /* Floating online toggle */
   onlineWrap: { paddingHorizontal: SPACING.lg, marginTop: -38 },

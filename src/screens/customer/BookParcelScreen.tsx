@@ -9,7 +9,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
 import { RADIUS, glow } from '../../constants/theme';
-import { ParcelSize, LocationInfo, ParcelInfo, Coordinates } from '../../types';
+import { ParcelSize, LocationInfo, ParcelInfo, Coordinates, PaymentMethod } from '../../types';
 import Input          from '../../components/common/Input';
 import Button         from '../../components/common/Button';
 import Card           from '../../components/common/Card';
@@ -23,6 +23,11 @@ const SIZES: { value: ParcelSize; label: string; desc: string; icon: string }[] 
   { value: 'small',  label: 'Small',  icon: '📄', desc: 'Documents, phone (≤1 kg)' },
   { value: 'medium', label: 'Medium', icon: '👟', desc: 'Shoes, books (1–5 kg)' },
   { value: 'large',  label: 'Large',  icon: '📦', desc: 'Clothes, boxes (5–20 kg)' },
+];
+
+const PAYMENT_METHODS: { value: PaymentMethod; label: string; desc: string; icon: string }[] = [
+  { value: 'COD',    label: 'Cash on Delivery', desc: 'Rider ko cash do delivery ke time', icon: '💵' },
+  { value: 'ONLINE', label: 'Pay Online',       desc: 'UPI · Cards · Netbanking · QR', icon: '💳' },
 ];
 
 const WEIGHT_PRESETS = [0.5, 1, 2, 5, 10];
@@ -70,6 +75,7 @@ const BookParcelScreen = () => {
   const [weight,           setWeight]           = useState('1');
   const [size,             setSize]             = useState<ParcelSize>('small');
   const [isFragile,        setIsFragile]        = useState(false);
+  const [paymentMethod,    setPaymentMethod]    = useState<PaymentMethod>('COD');
   const [loading,          setLoading]          = useState(false);
 
   const handlePickupSelect = (address: string, coords: Coordinates) => {
@@ -161,7 +167,7 @@ const BookParcelScreen = () => {
         contactPhone: deliveryPhone,
       };
       const estimate = await estimateFare({ pickup: pickupCoords, delivery: deliveryCoords, parcel });
-      navigation.navigate('FareEstimate', { pickup, delivery, parcel, estimate });
+      navigation.navigate('FareEstimate', { pickup, delivery, parcel, estimate, paymentMethod });
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -329,6 +335,35 @@ const BookParcelScreen = () => {
             </Card>
           </View>
 
+          {/* Payment Method */}
+          <View style={styles.sectionBlock}>
+            <SectionHead icon="💳" color={COLORS.secondary} title="Payment Method" sub="Kaise pay karoge" step={4} />
+            <View style={styles.paymentGrid}>
+              {PAYMENT_METHODS.map(pm => {
+                const active = paymentMethod === pm.value;
+                return (
+                  <Pressable
+                    key={pm.value}
+                    style={({ pressed }) => [
+                      styles.paymentCard,
+                      active && styles.paymentCardActive,
+                      pressed && { transform: [{ scale: 0.97 }] },
+                    ]}
+                    onPress={() => setPaymentMethod(pm.value)}>
+                    {active && (
+                      <View style={styles.sizeCheck}>
+                        <Text style={styles.sizeCheckText}>✓</Text>
+                      </View>
+                    )}
+                    <Text style={styles.sizeIcon}>{pm.icon}</Text>
+                    <Text style={[styles.sizeLabel, active && styles.sizeLabelActive]}>{pm.label}</Text>
+                    <Text style={styles.sizeDesc} numberOfLines={2}>{pm.desc}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           <Button
             title="Get Fare Estimate"
             onPress={handleEstimate}
@@ -378,6 +413,16 @@ const styles = StyleSheet.create({
   weightChipTextActive: { color: COLORS.primary },
 
   sizeGrid: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  paymentGrid: { flexDirection: 'row', gap: 10 },
+  paymentCard: {
+    flex: 1, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border,
+    paddingVertical: 16, paddingHorizontal: 8, alignItems: 'center', backgroundColor: COLORS.surface,
+    position: 'relative',
+  },
+  paymentCardActive: {
+    borderColor: COLORS.secondary, backgroundColor: COLORS.secondaryBg,
+    ...glow(COLORS.secondary, 0.18),
+  },
   sizeCard: {
     flex: 1, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border,
     paddingVertical: 16, paddingHorizontal: 8, alignItems: 'center', backgroundColor: COLORS.surface,

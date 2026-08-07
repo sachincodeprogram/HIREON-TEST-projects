@@ -11,6 +11,7 @@ import EarningsScreen       from '../screens/rider/EarningsScreen';
 import RiderProfileScreen   from '../screens/rider/RiderProfileScreen';
 import ActiveDeliveryScreen from '../screens/rider/ActiveDeliveryScreen';
 import NavigationScreen     from '../screens/rider/NavigationScreen';
+import WalletScreen         from '../screens/rider/WalletScreen';
 
 const Tab   = createBottomTabNavigator<RiderTabParamList>();
 const Stack = createNativeStackNavigator<RiderStackParamList>();
@@ -31,6 +32,7 @@ const RiderNavigator = () => (
     <Stack.Screen name="RiderTabs"      component={RiderTabs} />
     <Stack.Screen name="ActiveDelivery" component={ActiveDeliveryScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="Navigation"     component={NavigationScreen}     options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="Wallet"         component={WalletScreen}         options={{ animation: 'slide_from_right' }} />
   </Stack.Navigator>
 );
 

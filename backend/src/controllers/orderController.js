@@ -1,3 +1,4 @@
+const crypto         = require('crypto');
 const Order          = require('../models/Order');
 const User           = require('../models/User');
 const RiderLocation  = require('../models/RiderLocation');
@@ -5,6 +6,9 @@ const { calculateFare, haversineKm } = require('../utils/fareCalculator');
 const { dispatchOrder, cancelDispatch, registerDecline } = require('../utils/dispatch');
 const { sendAddressChangePush } = require('../utils/push');
 const { success, error } = require('../utils/apiResponse');
+const { getOrCreateWallet, creditWallet, debitWallet } = require('../utils/wallet');
+const { splitFareForCommission, walletMinBalancePaise } = require('../utils/commission');
+const { getRazorpay } = require('../utils/razorpay');
 
 const genOtp = () => Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -39,9 +43,10 @@ const estimateFare = async (req, res) => {
 // POST /api/v1/orders
 const createOrder = async (req, res) => {
   try {
-    const { pickup, delivery, parcel } = req.body;
+    const { pickup, delivery, parcel, paymentMethod } = req.body;
     if (!pickup || !delivery) return res.status(400).json(error('pickup and delivery required'));
 
+    const method = paymentMethod === 'ONLINE' ? 'ONLINE' : 'COD';
     const { estimated, riderEarning, distance } = calculateFare({ pickup: pickup.coordinates, delivery: delivery.coordinates, parcel });
 
     const order = await Order.create({
@@ -51,20 +56,96 @@ const createOrder = async (req, res) => {
       parcel:   parcel || {},
       fare:     { estimated, final: estimated, distance },
       status:   'pending',
+      paymentMethod: method,
       pickupOtp:   genOtp(),
       deliveryOtp: genOtp(),
       timeline: [{ status: 'pending', note: 'Order placed' }],
       riderEarning,
     });
 
-    // Tiered radius dispatch: 1km -> 3km -> 5km tak nearest riders ko bhejo.
-    dispatchOrder(req.io, req.onlineRiders, {
-      orderId: order._id,
-      pickup:  order.pickup.coordinates,
-      payload: buildOrderPayload(order),
-    });
+    // COD: turant dispatch. ONLINE: pehle payment (pay/order + pay/verify, ya
+    // webhook) confirm honi chahiye — dispatch waha se trigger hota hai.
+    if (method === 'COD') {
+      dispatchOrder(req.io, req.onlineRiders, {
+        orderId: order._id,
+        pickup:  order.pickup.coordinates,
+        payload: buildOrderPayload(order),
+      });
+    }
 
     res.status(201).json(success('Order placed', order));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
+// POST /api/v1/orders/:id/pay/order — ONLINE order ke liye Razorpay order banao
+const createOrderPaymentOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json(error('Order not found'));
+    if (order.customer.toString() !== req.user._id.toString()) return res.status(403).json(error('Not your order'));
+    if (order.paymentMethod !== 'ONLINE') return res.status(400).json(error('This order is not set up for online payment'));
+    if (order.paymentStatus === 'paid') return res.status(400).json(error('Already paid'));
+
+    const amountPaise = Math.round(order.fare.final * 100);
+    const razorpay = getRazorpay();
+    const rzpOrder = await razorpay.orders.create({
+      amount:   amountPaise,
+      currency: 'INR',
+      receipt:  `order_${order.orderId}`,
+      notes:    { purpose: 'ORDER_PAYMENT', orderId: order._id.toString() },
+    });
+
+    order.razorpayOrderId = rzpOrder.id;
+    await order.save();
+
+    res.json(success('Payment order created', {
+      razorpayOrderId: rzpOrder.id,
+      amount:   rzpOrder.amount,
+      currency: rzpOrder.currency,
+      keyId:    process.env.RAZORPAY_KEY_ID,
+    }));
+  } catch (err) {
+    res.status(500).json(error(err.message));
+  }
+};
+
+// POST /api/v1/orders/:id/pay/verify — client-side confirm ke baad dispatch trigger karo.
+// Webhook (paymentController) authoritative path bhi yahi karta hai — dono
+// paymentStatus check se idempotent hain (dispatch dobara nahi hoga).
+const verifyOrderPayment = async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json(error('razorpay_order_id, razorpay_payment_id, razorpay_signature chahiye'));
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json(error('Order not found'));
+    if (order.customer.toString() !== req.user._id.toString()) return res.status(403).json(error('Not your order'));
+    if (order.razorpayOrderId !== razorpay_order_id) return res.status(400).json(error('Order/payment mismatch'));
+
+    const expected = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+    if (expected !== razorpay_signature) return res.status(400).json(error('Signature verification failed'));
+
+    if (order.paymentStatus !== 'paid') {
+      order.paymentStatus = 'paid';
+      order.razorpayPaymentId = razorpay_payment_id;
+      order.timeline.push({ status: order.status, note: 'Payment received' });
+      await order.save();
+
+      dispatchOrder(req.io, req.onlineRiders, {
+        orderId: order._id,
+        pickup:  order.pickup.coordinates,
+        payload: buildOrderPayload(order),
+      });
+    }
+
+    res.json(success('Payment verified', order));
   } catch (err) {
     res.status(500).json(error(err.message));
   }
@@ -103,7 +184,14 @@ const getPendingOrders = async (req, res) => {
   try {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const orders = await Order.find({ status: 'pending', rider: null, createdAt: { $gte: todayStart } })
+    // ONLINE order jab tak paid na ho, kisi rider ki list me mat dikhao —
+    // warna direct accept se bina-payment ke order le sakta hai.
+    const orders = await Order.find({
+      status: 'pending',
+      rider: null,
+      createdAt: { $gte: todayStart },
+      $or: [{ paymentMethod: 'COD' }, { paymentStatus: 'paid' }],
+    })
       .sort({ createdAt: -1 }).limit(20)
       .populate('customer', 'name phone avatar');
     res.json(success('Pending orders', orders));
@@ -160,6 +248,22 @@ const acceptOrder = async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json(error('Order not found'));
     if (order.status !== 'pending') return res.status(400).json(error('Order no longer available'));
+    if (order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'paid') {
+      return res.status(400).json(error('Payment pending — customer ne abhi pay nahi kiya'));
+    }
+
+    // COD order me pura cash rider ke paas jaata hai — commission baad me
+    // wallet se debit hogi. Agar wallet already floor se neeche hai to naya
+    // COD order accept nahi karne dena jab tak recharge na ho.
+    if (order.paymentMethod === 'COD') {
+      const wallet = await getOrCreateWallet(req.user._id);
+      const floor  = walletMinBalancePaise();
+      if (wallet.balance < floor) {
+        return res.status(403).json(error(
+          `Wallet balance ₹${(wallet.balance / 100).toFixed(2)} hai — COD orders lene ke liye pehle wallet recharge karein.`
+        ));
+      }
+    }
 
     order.rider  = req.user._id;
     order.status = 'accepted';
@@ -225,6 +329,7 @@ const confirmDelivery = async (req, res) => {
     order.status = 'delivered';
     order.deliveredAt = new Date();
     order.fare.final = order.fare.estimated;
+    if (order.paymentMethod === 'COD') order.paymentStatus = 'paid'; // cash collected hand-to-hand
     order.timeline.push({ status: 'delivered', note: 'Parcel delivered successfully' });
     await order.save();
 
@@ -232,6 +337,37 @@ const confirmDelivery = async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
       $inc: { totalEarnings: order.riderEarning, totalDeliveries: 1 },
     });
+
+    // Wallet settlement — atomic + idempotent (order+type unique index), isliye
+    // ek retried confirm-delivery call se double credit/debit kabhi nahi hota.
+    // ONLINE: fare pehle hi Razorpay se platform ko mil chuka — rider ko
+    // (fare - commission) wallet me credit karo. COD: cash pura rider ke paas
+    // hai — sirf commission wallet se debit karo (balance negative ja sakta hai).
+    try {
+      const farePaise = Math.round(order.fare.final * 100);
+      const { commissionPaise, riderNetPaise } = splitFareForCommission(farePaise);
+      if (order.paymentMethod === 'ONLINE') {
+        await creditWallet({
+          riderId: req.user._id,
+          type: 'EARNING',
+          amountPaise: riderNetPaise,
+          orderId: order._id,
+          description: `Earning for order ${order.orderId}`,
+        });
+      } else {
+        await debitWallet({
+          riderId: req.user._id,
+          type: 'COMMISSION_DEBIT',
+          amountPaise: commissionPaise,
+          orderId: order._id,
+          description: `Commission for COD order ${order.orderId}`,
+        });
+      }
+    } catch (walletErr) {
+      // Delivery ho chuki — wallet settlement fail hone par bhi response block
+      // mat karo, log karke aage badho (ops reconcile kar sakta hai).
+      console.error(`Wallet settlement failed for order ${order._id}:`, walletErr.message);
+    }
 
     req.io?.to(order._id.toString()).emit('order_update', { status: 'delivered' });
     res.json(success('Delivery confirmed', order));
@@ -384,4 +520,4 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-module.exports = { estimateFare, createOrder, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, declineOrder, confirmPickup, confirmDelivery, updateDeliveryAddress, rateOrder, cancelOrder };
+module.exports = { estimateFare, createOrder, createOrderPaymentOrder, verifyOrderPayment, getOrders, getOrder, getPendingOrders, getNearbyRiders, redispatchOrder, acceptOrder, declineOrder, confirmPickup, confirmDelivery, updateDeliveryAddress, rateOrder, cancelOrder, buildOrderPayload };
