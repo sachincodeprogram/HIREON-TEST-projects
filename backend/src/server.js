@@ -51,7 +51,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Public static pages (privacy policy, etc.) — needed for Play Store listing
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
 app.use('/api/v1', routes);
 
