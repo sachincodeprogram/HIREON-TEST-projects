@@ -1,6 +1,7 @@
 require('dotenv').config();
 require('./config/firebase');          // initialize Firebase Admin early
 
+const path       = require('path');
 const express    = require('express');
 const http       = require('http');
 const { Server } = require('socket.io');
@@ -48,6 +49,9 @@ app.use(cors({
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
+
+// Public static pages (privacy policy, etc.) — needed for Play Store listing
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/v1', routes);
 
