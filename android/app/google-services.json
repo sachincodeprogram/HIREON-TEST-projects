@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "500086228953-t9v7q5ora626709k5u0nv15sqf3fhjbq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hireon",
+            "certificate_hash": "7f7e8bd085d6fcd3d0ba3de0503e00e03c82b1e0"
+          }
+        },
+        {
           "client_id": "500086228953-8he1qejdf8h96g7n85b8ob10o499p8gi.apps.googleusercontent.com",
           "client_type": 3
         }
