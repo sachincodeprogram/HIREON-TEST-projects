@@ -30,9 +30,12 @@ const MonumentsSilhouette = () => (
     <Rect x={79} y={120} width={14} height={40} fill={C} />
 
     {/* === INDIA GATE (x~100) === */}
-    <Rect x={95}  y={95}  width={68} height={11} fill={C} /> {/* top beam */}
-    <Rect x={97}  y={106} width={14} height={54} fill={C} /> {/* left pillar */}
-    <Rect x={147} y={106} width={14} height={54} fill={C} /> {/* right pillar */}
+    {/* top beam */}
+    <Rect x={95}  y={95}  width={68} height={11} fill={C} />
+    {/* left pillar */}
+    <Rect x={97}  y={106} width={14} height={54} fill={C} />
+    {/* right pillar */}
+    <Rect x={147} y={106} width={14} height={54} fill={C} />
     <Path
       d="M 97 122 Q 129 82 161 122 Z"
       fill={C}
