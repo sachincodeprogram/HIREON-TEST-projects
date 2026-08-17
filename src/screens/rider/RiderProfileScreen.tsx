@@ -14,7 +14,7 @@ import { clearDevPhone } from '../../services/apiClient';
 import Card   from '../../components/common/Card';
 import Input  from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import { updateProfile } from '../../services/authService';
+import { updateProfile, deleteAccount } from '../../services/authService';
 import { RINGTONES, Ringtone } from '../../constants/ringtones';
 import { getSavedRingtoneId, saveRingtoneId } from '../../services/ringtoneService';
 
@@ -97,6 +97,38 @@ const RiderProfileScreen = () => {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your profile, location history, and delivery history. This cannot be undone. If you have a wallet balance, settle it first from My Wallet. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: () => {
+            Alert.alert('Confirm Deletion', 'Tap "Delete Forever" to permanently delete your account.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete Forever', style: 'destructive', onPress: async () => {
+                  try {
+                    setLoading(true);
+                    await deleteAccount();
+                    clearDevPhone();
+                    try { await auth().signOut(); } catch {}
+                    dispatch(clearAuth());
+                  } catch (e: any) {
+                    Alert.alert('Could not delete account', e.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                },
+              },
+            ]);
+          },
+        },
+      ],
+    );
   };
 
   const infoRows = editing ? null : [
@@ -235,6 +267,13 @@ const RiderProfileScreen = () => {
           <Button title="Logout" onPress={handleLogout} variant="danger" />
         </View>
 
+        {/* Delete Account */}
+        <View style={styles.section}>
+          <TouchableOpacity onPress={handleDeleteAccount} style={styles.deleteAccountBtn}>
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
@@ -328,6 +367,9 @@ const styles = StyleSheet.create({
   },
   ringCheckText: { color: '#fff', fontSize: 13, fontWeight: '900' },
   ringPreview: { fontSize: 13, color: COLORS.textLight, width: 24, textAlign: 'center' },
+
+  deleteAccountBtn: { alignItems: 'center', paddingVertical: 10 },
+  deleteAccountText: { fontSize: 13, fontWeight: '700', color: COLORS.textMuted, textDecorationLine: 'underline' },
 });
 
 export default RiderProfileScreen;

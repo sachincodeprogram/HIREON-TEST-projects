@@ -10,7 +10,7 @@ import { clearDevPhone } from '../../services/apiClient';
 import Card   from '../../components/common/Card';
 import Input  from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import { updateProfile } from '../../services/authService';
+import { updateProfile, deleteAccount } from '../../services/authService';
 import { setProfile } from '../../store/slices/authSlice';
 
 const CustomerProfileScreen = () => {
@@ -50,6 +50,38 @@ const CustomerProfileScreen = () => {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your profile, saved addresses, and order history. This cannot be undone. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: () => {
+            Alert.alert('Confirm Deletion', 'Tap "Delete Forever" to permanently delete your account.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete Forever', style: 'destructive', onPress: async () => {
+                  try {
+                    setLoading(true);
+                    await deleteAccount();
+                    clearDevPhone();
+                    try { await auth().signOut(); } catch {}
+                    dispatch(clearAuth());
+                  } catch (e: any) {
+                    Alert.alert('Could not delete account', e.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                },
+              },
+            ]);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -131,6 +163,13 @@ const CustomerProfileScreen = () => {
           <Button title="Logout" onPress={handleLogout} variant="danger" />
         </View>
 
+        {/* Delete Account */}
+        <View style={styles.section}>
+          <TouchableOpacity onPress={handleDeleteAccount} style={styles.deleteAccountBtn}>
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
@@ -192,6 +231,9 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 13, color: COLORS.textMuted },
   infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.text, maxWidth: '60%', textAlign: 'right' },
+
+  deleteAccountBtn: { alignItems: 'center', paddingVertical: 10 },
+  deleteAccountText: { fontSize: 13, fontWeight: '700', color: COLORS.textMuted, textDecorationLine: 'underline' },
 });
 
 export default CustomerProfileScreen;

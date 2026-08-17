@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema({
   totalDeliveries:   { type: Number, default: 0 },
   rating:            { type: Number, default: 5.0, min: 1, max: 5 },
   ratingCount:       { type: Number, default: 0 },
+
+  deletedAt:         { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

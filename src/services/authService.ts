@@ -23,3 +23,7 @@ export const updateProfile = async (updates: Partial<UserProfile>): Promise<User
   const { data } = await apiClient.put('/auth/profile', updates);
   return data.data;
 };
+
+export const deleteAccount = async (): Promise<void> => {
+  await apiClient.delete('/auth/account');
+};
