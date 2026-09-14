@@ -4,7 +4,7 @@ import {
   RefreshControl, Switch, Alert, ActivityIndicator,
   StatusBar, Modal, Vibration, Animated, Easing, Dimensions, AppState,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -63,6 +63,12 @@ const RiderDashboard = () => {
   const profile    = useAppSelector(s => s.auth.profile);
   const isOnline   = useAppSelector(s => s.rider.isOnline);
   const navigation = useNavigation<NativeStackNavigationProp<RiderStackParamList>>();
+  const insets      = useSafeAreaInsets();
+  // CustomerDashboard me jo edge-to-edge inset-race fix kiya tha (insets.top
+  // kabhi-kabhi 0 aata hai, header status bar ke peeche chala jaata hai),
+  // wahi floor yahan bhi — same header pattern hai.
+  const headerTopPad = Math.max(insets.top, 28);
+  const goProfile     = () => navigation.navigate('RiderTabs', { screen: 'Profile' } as any);
 
   const [togglingOnline, setTogglingOnline] = useState(false);
   const [refreshing,     setRefreshing]     = useState(false);
@@ -518,7 +524,7 @@ const RiderDashboard = () => {
         {/* ── Gradient header ── */}
         <View style={styles.header}>
           <HeaderBg />
-          <SafeAreaView edges={['top']}>
+          <View style={{ paddingTop: headerTopPad }}>
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.greeting}>Hey, {firstName} 👋</Text>
@@ -530,11 +536,11 @@ const RiderDashboard = () => {
                 onPress={() => navigation.navigate('Wallet')}>
                 <Text style={styles.walletBtnIcon}>👛</Text>
               </TouchableOpacity>
-              <View style={styles.avatar}>
+              <TouchableOpacity style={styles.avatar} onPress={goProfile} activeOpacity={0.8}>
                 <Text style={styles.avatarText}>{firstName[0].toUpperCase()}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
-          </SafeAreaView>
+          </View>
         </View>
 
         {/* ── Floating online toggle ── */}
