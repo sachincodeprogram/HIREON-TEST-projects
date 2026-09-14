@@ -41,10 +41,56 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const phoneInputRef   = useRef<TextInput>(null);
   const otpInputRef     = useRef<TextInput>(null);
+  const finishingRef    = useRef(false);
 
   useEffect(() => {
     if (__DEV__) setPhone(TEST_PHONES[0]);
   }, []);
+
+  // Sign-in ho jane ke baad ka common step: profile hai to store karo,
+  // nahi hai (404) to Signup par bhejo. Network/timeout error par Signup
+  // MAT bhejo — existing user galti se dobara register karne lag jaata hai.
+  const finishLogin = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    try {
+      const p = await getMyProfile();
+      dispatch(setProfile(p));
+    } catch (e: any) {
+      if (e?.status === 404) {
+        navigation.navigate('Signup', { phone: '+91' + phone.trim() });
+      } else {
+        Alert.alert(
+          'Connection Problem',
+          'Verified, but we could not load your profile. Please check your internet and retry.',
+          [{ text: 'Retry', onPress: () => { finishLogin(); } }],
+        );
+      }
+    } finally {
+      finishingRef.current = false;
+    }
+  };
+
+  // Kya Firebase ne is number ko already sign-in kar rakha hai?
+  const isAlreadySignedIn = () =>
+    auth().currentUser?.phoneNumber === '+91' + phone.trim();
+
+  // Real device par Firebase aksar SMS khud padh leta hai (auto-retrieval /
+  // instant verification) aur user ko silently sign-in kar deta hai. Uske baad
+  // user OTP type karke confirm() dabata hai to 'auth/session-expired' aata hai,
+  // kyunki wo code already use ho chuka hota hai. Isliye OTP step par auth state
+  // ko sunte hain — auto-verify hote hi seedha aage badh jao.
+  useEffect(() => {
+    if (step !== 'otp') return;
+    const unsub = auth().onAuthStateChanged(u => {
+      if (u && u.phoneNumber === '+91' + phone.trim()) {
+        setVerifyLoading(true);
+        finishLogin().finally(() => setVerifyLoading(false));
+      }
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -89,6 +135,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setSendLoading(true);
       const confirmation = await auth().signInWithPhoneNumber('+91' + trimmed);
+      // Instant verification: Play Services ne number bina SMS ke verify kar
+      // diya aur user already sign-in hai — OTP screen dikhana hi nahi hai.
+      // (Is case me confirm() hamesha 'Wrong OTP' / 'session-expired' deta.)
+      if (auth().currentUser?.phoneNumber === '+91' + trimmed) {
+        await finishLogin();
+        return;
+      }
       confirmationRef.current = confirmation;
       setStep('otp');
       setCountdown(OTP_COUNTDOWN);
@@ -104,6 +157,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Invalid OTP', 'Please enter the 6-digit OTP.');
       return;
     }
+    // Auto-verify pehle hi ho chuka ho to confirm() mat karo — seedha aage.
+    if (isAlreadySignedIn()) {
+      setVerifyLoading(true);
+      await finishLogin();
+      setVerifyLoading(false);
+      return;
+    }
     if (!confirmationRef.current) {
       Alert.alert('Error', 'Session expired. Please request a new OTP.');
       setStep('phone');
@@ -112,13 +172,19 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setVerifyLoading(true);
       await confirmationRef.current.confirm(otp.trim());
-      try {
-        const p = await getMyProfile();
-        dispatch(setProfile(p));
-      } catch {
-        navigation.navigate('Signup', { phone: '+91' + phone.trim() });
-      }
+      await finishLogin();
     } catch (error: any) {
+      // confirm() fail hua par Firebase ne beech me auto-verify kar diya ho —
+      // to error dikhane ki jagah aage badho.
+      if (isAlreadySignedIn()) {
+        await finishLogin();
+        return;
+      }
+      if (error?.code === 'auth/session-expired' || error?.code === 'auth/code-expired') {
+        Alert.alert('OTP Expired', 'This OTP is no longer valid. Please request a new one.');
+        handleResendOtp();
+        return;
+      }
       handleFirebaseError(error);
     } finally {
       setVerifyLoading(false);
@@ -157,7 +223,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     if (code === 'auth/invalid-phone-number')          message = 'Invalid phone number.';
     else if (code === 'auth/too-many-requests')         message = 'Too many attempts. Please wait and try again.';
     else if (code === 'auth/invalid-verification-code') message = 'Wrong OTP. Please check and try again.';
-    else if (code === 'auth/code-expired')              message = 'OTP expired. Please request a new one.';
+    else if (code === 'auth/code-expired' ||
+             code === 'auth/session-expired')           message = 'OTP expired. Please request a new one.';
     else if (code === 'auth/operation-not-allowed')     message = 'Phone auth not enabled.';
     else if (code === 'auth/network-request-failed')    message = 'Network error. Check your internet connection.';
     else if (error?.message)                            message = error.message;

@@ -28,7 +28,14 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   res => res,
-  err => Promise.reject(new Error(err.response?.data?.message || err.message)),
+  err => {
+    const e: any = new Error(err.response?.data?.message || err.message);
+    // HTTP status bhi saath rakho — callers 404 (profile nahi) aur
+    // network/timeout error me farq kar saken.
+    e.status = err.response?.status;
+    e.code   = err.code;
+    return Promise.reject(e);
+  },
 );
 
 export default apiClient;

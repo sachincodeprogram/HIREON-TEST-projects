@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, StatusBar, Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -46,6 +46,13 @@ const CustomerDashboard = () => {
   const orders     = useAppSelector(s => s.order.orders);
   const loading    = useAppSelector(s => s.order.loading);
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
+  const insets      = useSafeAreaInsets();
+  // Edge-to-edge devices kabhi kabhi pehle render pass me insets.top 0 de
+  // dete hain (SafeAreaView race) — us case me bell/avatar y=0 par chale
+  // jaate the aur taps asli OS status bar intercept kar leta tha (avatar
+  // tap-to-Profile "kaam nahi karta" jaisa lagta tha). Floor lagao taaki
+  // header hamesha status bar ke neeche hi rahe.
+  const headerTopPad = Math.max(insets.top, 28);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -134,7 +141,7 @@ const CustomerDashboard = () => {
         {/* ── Gradient header ── */}
         <View style={styles.header}>
           <HeaderBg />
-          <SafeAreaView edges={['top']}>
+          <View style={{ paddingTop: headerTopPad }}>
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.greeting}>{getGreeting()},</Text>
@@ -153,7 +160,7 @@ const CustomerDashboard = () => {
               <View style={styles.trustDivider} />
               <Text style={styles.trustText}>🔒 Secure & tracked</Text>
             </View>
-          </SafeAreaView>
+          </View>
         </View>
 
         {/* ── Floating stats ── */}
