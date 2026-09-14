@@ -16,9 +16,16 @@ type Props = {
   route:      RouteProp<AuthStackParamList, 'Signup'>;
 };
 
+const isValidPhone = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
+
 const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { phone } = route.params;
-  const [name, setName] = useState('');
+  // Phone-OTP login se aaya user: route.params.phone already Firebase-verified
+  // hai (readonly). Google login se aaya user: ye khaali hota hai — usko yahin
+  // ek plain text field dete hain taaki OTP ke bina number add kar sake.
+  const { phone: verifiedPhone } = route.params;
+  const isGoogleFlow = !verifiedPhone;
+  const [name,       setName]       = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
 
   useEffect(() => {
     if (__DEV__) setName('Test User');
@@ -37,6 +44,14 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
     if (name.trim().length < 2) {
       Alert.alert('Invalid Name', 'Name must be at least 2 characters.');
       return;
+    }
+    let phone = verifiedPhone;
+    if (isGoogleFlow && phoneInput.trim()) {
+      if (!isValidPhone(phoneInput)) {
+        Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9 — or leave it blank and add it later from Profile.');
+        return;
+      }
+      phone = phoneInput.trim();
     }
     navigation.navigate('RoleSelect', { name: name.trim(), phone });
   };
@@ -63,15 +78,33 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
 
-          {/* Verified phone pill */}
-          <View style={styles.verifiedRow}>
-            <View style={styles.verifiedDot} />
-            <View style={styles.verifiedText}>
-              <Text style={styles.verifiedLabel}>Verified Mobile</Text>
-              <Text style={styles.verifiedPhone}>{phone || 'Google Account'}</Text>
+          {isGoogleFlow ? (
+            <>
+              <Text style={styles.inputSectionTitle}>Mobile Number (optional)</Text>
+              <Input
+                value={phoneInput}
+                onChangeText={t => setPhoneInput(t.replace(/[^0-9]/g, '').slice(0, 10))}
+                placeholder="10-digit mobile number"
+                leftIcon="📞"
+                keyboardType="phone-pad"
+              />
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  Signed in with Google — no OTP needed. Add your number now, or
+                  skip and add it later from Profile.
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.verifiedRow}>
+              <View style={styles.verifiedDot} />
+              <View style={styles.verifiedText}>
+                <Text style={styles.verifiedLabel}>Verified Mobile</Text>
+                <Text style={styles.verifiedPhone}>{verifiedPhone}</Text>
+              </View>
+              <Text style={styles.checkmark}>✓</Text>
             </View>
-            <Text style={styles.checkmark}>✓</Text>
-          </View>
+          )}
 
           <Text style={styles.inputSectionTitle}>Your Name</Text>
           <Input
