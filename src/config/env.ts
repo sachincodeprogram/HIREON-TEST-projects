@@ -34,7 +34,7 @@ const dev: AppEnv = {
   // localhost works on a USB device via `adb reverse tcp:5000 tcp:5000`
   API_BASE_URL: 'http://localhost:5000/api/v1',
   SOCKET_URL:   'http://localhost:5000',
-  GOOGLE_MAPS_API_KEY: 'AIzaSyCeRdrgB7MsW-YWmkcY-ATGol9_xCJ9goM',
+  GOOGLE_MAPS_API_KEY: 'AIzaSyAetnuiIq8bAsHtDf1bFwkd5dOMo7CGREM',
   OSRM_BASE_URL: 'https://router.project-osrm.org',
 };
 
@@ -43,8 +43,15 @@ const prod: AppEnv = {
   // Live backend on Render (HTTPS).
   API_BASE_URL: 'https://hireon-2b4t.onrender.com/api/v1',
   SOCKET_URL:   'https://hireon-2b4t.onrender.com',
-  // TODO(prod): use a release-restricted Maps key (package name + SHA-1).
-  GOOGLE_MAPS_API_KEY: 'AIzaSyCeRdrgB7MsW-YWmkcY-ATGol9_xCJ9goM',
+  // NOTE: this key is called via plain REST (Places/Geocoding/Routes JSON
+  // endpoints, key as query param / X-Goog-Api-Key header) from JS — not
+  // through the native Android Maps SDK. Google only accepts the
+  // "Android apps" (package+SHA-1) key restriction when the request carries
+  // the X-Android-Package/X-Android-Cert headers that ONLY the native SDK
+  // adds. Restricting this key to Android apps will break autosuggest
+  // exactly like an HTTP-referrer restriction does — restrict by API only,
+  // not by app, unless this code moves to the native SDK.
+  GOOGLE_MAPS_API_KEY: 'AIzaSyAetnuiIq8bAsHtDf1bFwkd5dOMo7CGREM',
   // TODO(prod): the public OSRM demo server has no SLA/rate guarantee —
   // self-host OSRM or enable Google Routes API (routeService tries Google first).
   OSRM_BASE_URL: 'https://router.project-osrm.org',
