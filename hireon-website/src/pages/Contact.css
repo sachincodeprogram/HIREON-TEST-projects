@@ -1,0 +1,141 @@
+.contact-page {
+  padding: 56px 0 96px;
+}
+
+.contact-header {
+  max-width: 640px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+
+.contact-header h1 {
+  font-size: 36px;
+  letter-spacing: -0.02em;
+  margin: 8px 0 14px;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.contact-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-alt);
+}
+
+.contact-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.contact-card h3 {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.contact-card a,
+.contact-card p {
+  font-size: 14.5px;
+  color: var(--text-soft);
+  text-decoration: none;
+}
+
+.contact-card a:hover {
+  color: var(--accent);
+}
+
+.contact-legal {
+  font-size: 13px;
+  color: var(--text-soft);
+  padding: 4px 4px;
+}
+
+.contact-form {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px;
+  background: var(--bg);
+}
+
+.contact-form h2 {
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+
+.contact-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 18px;
+}
+
+.contact-form input,
+.contact-form textarea {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 400;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  resize: vertical;
+}
+
+.contact-form input:focus,
+.contact-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.contact-form .btn {
+  width: 100%;
+}
+
+.contact-sent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.contact-sent-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: #1fa855;
+}
+
+@media (max-width: 800px) {
+  .contact-grid {
+    grid-template-columns: 1fr;
+  }
+}

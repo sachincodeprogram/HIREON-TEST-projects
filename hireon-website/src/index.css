@@ -1,0 +1,138 @@
+:root {
+  --text: #4b5262;
+  --text-h: #10131a;
+  --text-soft: #6b7280;
+  --bg: #ffffff;
+  --bg-alt: #f6f7f9;
+  --border: #e5e7eb;
+  --accent: #ff6a1a;
+  --accent-dark: #e0530c;
+  --accent-bg: rgba(255, 106, 26, 0.1);
+  --card-shadow: 0 10px 30px -12px rgba(16, 19, 26, 0.15);
+  --header-h: 72px;
+
+  --sans: 'Segoe UI', system-ui, Roboto, sans-serif;
+
+  font: 16px/1.55 var(--sans);
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #b7bcc7;
+    --text-h: #f5f6f8;
+    --text-soft: #8b93a3;
+    --bg: #12141a;
+    --bg-alt: #191c24;
+    --border: #2a2e38;
+    --accent: #ff7d38;
+    --accent-dark: #ff934f;
+    --accent-bg: rgba(255, 125, 56, 0.15);
+    --card-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--sans);
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font: inherit;
+}
+
+.container {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 26px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 8px 20px -6px rgba(255, 106, 26, 0.55);
+}
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-h);
+}
+
+.btn-outline:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-bg);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
