@@ -95,8 +95,9 @@ yarn-error.log
 # Stray runtime error/output logs
 *.err
 
-# Built APKs copied to repo root for sharing
+# Built APKs/AABs copied to repo root for sharing
 *.apk
+*.aab
 
 # One-off backend debug/query scripts from manual testing
 backend/_*.js
