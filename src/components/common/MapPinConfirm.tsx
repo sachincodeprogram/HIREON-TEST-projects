@@ -9,6 +9,7 @@ import { RADIUS } from '../../constants/theme';
 import Button from './Button';
 import { reverseGeocode } from '../../services/locationService';
 import { Coordinates } from '../../types';
+import { useTranslation } from '../../i18n';
 
 interface Props {
   visible: boolean;
@@ -27,9 +28,10 @@ interface Props {
 // milte hain.
 const MapPinConfirm: React.FC<Props> = ({
   visible, initialCoords, initialAddress,
-  title = 'Exact Location Pin Karo',
+  title,
   onConfirm, onClose,
 }) => {
+  const { t } = useTranslation();
   const [coords, setCoords]     = useState<Coordinates>(initialCoords);
   const [address, setAddress]   = useState(initialAddress);
   const [areaHint, setAreaHint] = useState('');
@@ -78,8 +80,8 @@ const MapPinConfirm: React.FC<Props> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.subtitle}>Map ghuma ke pin ko exact jagah par rakho</Text>
+              <Text style={styles.title}>{title || t('map.pinTitle')}</Text>
+              <Text style={styles.subtitle}>{t('map.pinSub')}</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7}>
               <Text style={styles.closeText}>✕</Text>
@@ -113,21 +115,21 @@ const MapPinConfirm: React.FC<Props> = ({
           {/* Bottom card */}
           <View style={styles.bottomCard}>
             {areaHint ? (
-              <Text style={styles.areaHint} numberOfLines={2}>📌 Pin yahan hai: {areaHint}</Text>
+              <Text style={styles.areaHint} numberOfLines={2}>{t('map.pinHere', { area: areaHint })}</Text>
             ) : (
-              <Text style={styles.areaHint}>📌 Pin ko apne ghar/dukaan par le jao</Text>
+              <Text style={styles.areaHint}>{t('map.moveToHome')}</Text>
             )}
-            <Text style={styles.inputLabel}>Poora address (house/flat no. ke saath)</Text>
+            <Text style={styles.inputLabel}>{t('map.fullAddress')}</Text>
             <TextInput
               style={styles.addressInput}
               value={address}
               onChangeText={setAddress}
-              placeholder="Jaise: 59, Tusiana Village, Knowledge Park V..."
+              placeholder={t('map.addressPh')}
               placeholderTextColor={COLORS.textLight}
               multiline
             />
             <Button
-              title="Yahi Location Confirm Karo"
+              title={t('map.confirm')}
               icon="✓"
               size="lg"
               onPress={handleConfirm}

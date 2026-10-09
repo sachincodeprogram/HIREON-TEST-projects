@@ -1,14 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { STATUS_COLORS, STATUS_LABELS } from '../../constants/api';
+import { STATUS_COLORS } from '../../constants/api';
+import { useTranslation, TranslationKey } from '../../i18n';
 import { OrderStatus } from '../../types';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
+  const { t } = useTranslation();
   const color = STATUS_COLORS[status] || '#64748B';
+  const key   = `status.${status}` as TranslationKey;
   return (
     <View style={[styles.badge, { backgroundColor: color + '18', borderColor: color + '40' }]}>
       <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={[styles.text, { color }]}>{STATUS_LABELS[status] || status}</Text>
+      <Text style={[styles.text, { color }]}>{t(key)}</Text>
     </View>
   );
 };

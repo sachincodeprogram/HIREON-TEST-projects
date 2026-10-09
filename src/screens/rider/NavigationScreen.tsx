@@ -14,6 +14,7 @@ import { connectSocket, joinOrderRoom, emitRiderLocation } from '../../services/
 import apiClient from '../../services/apiClient';
 import { fetchRoute, RouteStep as NavStep, LatLng } from '../../services/routeService';
 import { Coordinates } from '../../types';
+import { useTranslation, translate } from '../../i18n';
 
 type Route = RouteProp<RiderStackParamList, 'Navigation'>;
 
@@ -68,7 +69,9 @@ function distanceToPolyline(p: Coordinates, line: LatLng[]): number {
 const fmtDist = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 const fmtDur  = (s: number) => {
   const min = Math.max(1, Math.round(s / 60));
-  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
+  return min < 60
+    ? translate('unit.min', { n: min })
+    : translate('unit.hMin', { h: Math.floor(min / 60), m: min % 60 });
 };
 const etaClock = (s: number) => {
   const d = new Date(Date.now() + s * 1000);
@@ -83,7 +86,10 @@ const etaClock = (s: number) => {
 const NavigationScreen = () => {
   const route      = useRoute<Route>();
   const navigation = useNavigation<any>();
+  const { t }      = useTranslation();
   const { orderId, destination, label, destinationAddress } = route.params;
+  // `label` English me aata hai ('Pickup'/'Delivery') — voice ke liye wahi, screen par translated.
+  const labelText = label === 'Pickup' ? t('fare.pickup') : label === 'Delivery' ? t('fare.delivery') : label;
 
   const destRef = useRef<Coordinates>({ lat: destination.lat, lng: destination.lng });
   const dest = destRef.current;
@@ -291,7 +297,7 @@ const NavigationScreen = () => {
     return (
       <View style={styles.loadingWrap}>
         <ActivityIndicator size="large" color={COLORS.secondary} />
-        <Text style={styles.loadingText}>Route nikaal rahe hain…</Text>
+        <Text style={styles.loadingText}>{t('nav.loadingRoute')}</Text>
       </View>
     );
   }
@@ -344,7 +350,7 @@ const NavigationScreen = () => {
           <Text style={styles.instrIcon}>{arrived ? '🏁' : currentStep?.icon ?? '⬆️'}</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.instrText} numberOfLines={2}>
-              {arrived ? 'Aap pahunch gaye! 🎉' : currentStep?.text ?? 'Continue'}
+              {arrived ? t('nav.arrived') : currentStep?.text ?? t('nav.continue')}
             </Text>
             {!arrived && <Text style={styles.instrDist}>{fmtDist(distToManeuver)}</Text>}
           </View>
@@ -352,7 +358,7 @@ const NavigationScreen = () => {
         {recalculating && (
           <View style={styles.reroute}>
             <ActivityIndicator color="#fff" size="small" />
-            <Text style={styles.rerouteText}>Re-routing… (galat raasta)</Text>
+            <Text style={styles.rerouteText}>{t('nav.rerouting')}</Text>
           </View>
         )}
       </SafeAreaView>
@@ -371,15 +377,15 @@ const NavigationScreen = () => {
       <SafeAreaView edges={['bottom']} style={styles.bottomSafe} pointerEvents="box-none">
         <View style={styles.bottomCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.etaBig}>{arrived ? 'Pahunch gaye' : fmtDur(remainingDur)}</Text>
+            <Text style={styles.etaBig}>{arrived ? t('nav.arrivedShort') : fmtDur(remainingDur)}</Text>
             <Text style={styles.etaMeta}>
-              {fmtDist(remainingDist)}{arrived ? '' : `  ·  ${etaClock(remainingDur)} pahunch`}
+              {fmtDist(remainingDist)}{arrived ? '' : `  ·  ${t('nav.eta', { time: etaClock(remainingDur) })}`}
             </Text>
-            <Text style={styles.destLabel} numberOfLines={1}>{label}: {destinationAddress}</Text>
+            <Text style={styles.destLabel} numberOfLines={1}>{labelText}: {destinationAddress}</Text>
           </View>
           <TouchableOpacity style={styles.exitBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
             <Text style={styles.exitText}>✕</Text>
-            <Text style={styles.exitLabel}>Exit</Text>
+            <Text style={styles.exitLabel}>{t('nav.exit')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

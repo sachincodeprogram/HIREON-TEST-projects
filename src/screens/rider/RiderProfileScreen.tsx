@@ -17,12 +17,15 @@ import Button from '../../components/common/Button';
 import { updateProfile, deleteAccount } from '../../services/authService';
 import { RINGTONES, Ringtone } from '../../constants/ringtones';
 import { getSavedRingtoneId, saveRingtoneId } from '../../services/ringtoneService';
+import { LanguageSettingRow } from '../../components/common/LanguagePicker';
+import { useTranslation, TranslationKey } from '../../i18n';
 
 Sound.setCategory('Playback');
 
 const RiderProfileScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RiderStackParamList>>();
   const dispatch = useAppDispatch();
+  const { t }    = useTranslation();
   const profile  = useAppSelector(s => s.auth.profile);
   const earnings = useAppSelector(s => s.rider.earnings);
 
@@ -80,17 +83,17 @@ const RiderProfileScreen = () => {
       dispatch(setProfile(updated));
       setEditing(false);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('profile.logout'), t('profile.logoutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Logout', style: 'destructive', onPress: async () => {
+        text: t('profile.logout'), style: 'destructive', onPress: async () => {
           clearDevPhone();
           try { await auth().signOut(); } catch {}
           dispatch(clearAuth());
@@ -101,16 +104,16 @@ const RiderProfileScreen = () => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'This permanently deletes your profile, location history, and delivery history. This cannot be undone. If you have a wallet balance, settle it first from My Wallet. Are you sure?',
+      t('profile.deleteAccount'),
+      t('profile.deleteRiderMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive', onPress: () => {
-            Alert.alert('Confirm Deletion', 'Tap "Delete Forever" to permanently delete your account.', [
-              { text: 'Cancel', style: 'cancel' },
+          text: t('common.delete'), style: 'destructive', onPress: () => {
+            Alert.alert(t('profile.confirmDeletion'), t('profile.confirmDeletionMsg'), [
+              { text: t('common.cancel'), style: 'cancel' },
               {
-                text: 'Delete Forever', style: 'destructive', onPress: async () => {
+                text: t('profile.deleteForever'), style: 'destructive', onPress: async () => {
                   try {
                     setLoading(true);
                     await deleteAccount();
@@ -118,7 +121,7 @@ const RiderProfileScreen = () => {
                     try { await auth().signOut(); } catch {}
                     dispatch(clearAuth());
                   } catch (e: any) {
-                    Alert.alert('Could not delete account', e.message);
+                    Alert.alert(t('profile.deleteFailed'), e.message);
                   } finally {
                     setLoading(false);
                   }
@@ -132,11 +135,11 @@ const RiderProfileScreen = () => {
   };
 
   const infoRows = editing ? null : [
-    { label: 'Full Name',      value: profile?.name,           icon: '👤' },
-    { label: 'Email',          value: profile?.email,          icon: '📧' },
-    { label: 'Phone',          value: profile?.phone || 'Not set', icon: '📞' },
-    { label: 'Vehicle Type',   value: profile?.vehicleType || '—',   icon: '🚗' },
-    { label: 'Vehicle Number', value: profile?.vehicleNumber || '—', icon: '🔢' },
+    { label: t('profile.fullName'),      value: profile?.name,           icon: '👤' },
+    { label: t('profile.email'),         value: profile?.email,          icon: '📧' },
+    { label: t('profile.phone'),         value: profile?.phone || t('common.notSet'), icon: '📞' },
+    { label: t('profile.vehicleType'),   value: profile?.vehicleType || '—',   icon: '🚗' },
+    { label: t('profile.vehicleNumber'), value: profile?.vehicleNumber || '—', icon: '🔢' },
   ];
 
   return (
@@ -153,7 +156,7 @@ const RiderProfileScreen = () => {
           <Text style={styles.heroName}>{profile?.name}</Text>
           {profile?.email ? <Text style={styles.heroEmail}>{profile.email}</Text> : null}
           <View style={styles.rolePill}>
-            <Text style={styles.rolePillText}>🏍️  Rider</Text>
+            <Text style={styles.rolePillText}>🏍️  {t('profile.rider')}</Text>
           </View>
 
           {/* Vehicle Info */}
@@ -170,19 +173,19 @@ const RiderProfileScreen = () => {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: COLORS.success }]}>{totalDeliveries}</Text>
-            <Text style={styles.statLabel}>Deliveries</Text>
+            <Text style={styles.statLabel}>{t('profile.deliveries')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: COLORS.secondary }]}>
               ₹{(totalEarnings / 1000).toFixed(1)}K
             </Text>
-            <Text style={styles.statLabel}>Earned</Text>
+            <Text style={styles.statLabel}>{t('profile.earned')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: COLORS.warning }]}>⭐ {rating}</Text>
-            <Text style={styles.statLabel}>Rating</Text>
+            <Text style={styles.statLabel}>{t('profile.rating')}</Text>
           </View>
         </View>
 
@@ -193,8 +196,8 @@ const RiderProfileScreen = () => {
               <Text style={styles.walletIconText}>👛</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.walletTitle}>My Wallet</Text>
-              <Text style={styles.walletSub}>Balance, recharge & transaction history</Text>
+              <Text style={styles.walletTitle}>{t('profile.myWallet')}</Text>
+              <Text style={styles.walletSub}>{t('profile.walletSub')}</Text>
             </View>
             <Text style={styles.walletArrow}>›</Text>
           </Card>
@@ -203,10 +206,10 @@ const RiderProfileScreen = () => {
         {/* Profile Info */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>Profile Information</Text>
+            <Text style={styles.sectionTitle}>{t('profile.info')}</Text>
             {!editing && (
               <TouchableOpacity onPress={() => setEditing(true)} style={styles.editBtn}>
-                <Text style={styles.editBtnText}>Edit</Text>
+                <Text style={styles.editBtnText}>{t('common.edit')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -214,13 +217,13 @@ const RiderProfileScreen = () => {
           <Card>
             {editing ? (
               <>
-                <Input label="Full Name"      value={name}          onChangeText={setName}         leftIcon="👤" />
-                <Input label="Phone"          value={phone}         onChangeText={setPhone}        keyboardType="phone-pad" leftIcon="📞" />
-                <Input label="Vehicle Type"   value={vehicleType}   onChangeText={setVehicleType}  placeholder="Bike, Scooter…" leftIcon="🚗" />
-                <Input label="Vehicle Number" value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="DL01AB1234" leftIcon="🔢" />
+                <Input label={t('profile.fullName')}      value={name}          onChangeText={setName}         leftIcon="👤" />
+                <Input label={t('profile.phone')}         value={phone}         onChangeText={setPhone}        keyboardType="phone-pad" leftIcon="📞" />
+                <Input label={t('profile.vehicleType')}   value={vehicleType}   onChangeText={setVehicleType}  placeholder={t('profile.vehicleTypePlaceholder')} leftIcon="🚗" />
+                <Input label={t('profile.vehicleNumber')} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="DL01AB1234" leftIcon="🔢" />
                 <View style={styles.editActions}>
-                  <Button title="Save" onPress={handleSave} loading={loading} style={{ flex: 1 }} />
-                  <Button title="Cancel" onPress={() => setEditing(false)} variant="ghost" style={{ flex: 1 }} />
+                  <Button title={t('common.save')} onPress={handleSave} loading={loading} style={{ flex: 1 }} />
+                  <Button title={t('common.cancel')} onPress={() => setEditing(false)} variant="ghost" style={{ flex: 1 }} />
                 </View>
               </>
             ) : (
@@ -240,9 +243,9 @@ const RiderProfileScreen = () => {
         {/* Ring Sound */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>New Order Ring Sound</Text>
+            <Text style={styles.sectionTitle}>{t('profile.ringTitle')}</Text>
           </View>
-          <Text style={styles.ringHint}>Tap to preview & set. Plays when a new order arrives.</Text>
+          <Text style={styles.ringHint}>{t('profile.ringHint')}</Text>
           <Card>
             {RINGTONES.map((rt, i) => {
               const active = selectedRingId === rt.id;
@@ -253,7 +256,7 @@ const RiderProfileScreen = () => {
                   onPress={() => handleSelectRingtone(rt)}
                   style={[styles.ringRow, i === RINGTONES.length - 1 && { borderBottomWidth: 0 }]}>
                   <Text style={styles.ringEmoji}>{rt.emoji}</Text>
-                  <Text style={[styles.ringLabel, active && styles.ringLabelActive]}>{rt.label}</Text>
+                  <Text style={[styles.ringLabel, active && styles.ringLabelActive]}>{t(`ring.${rt.id}` as TranslationKey)}</Text>
                   {active
                     ? <View style={styles.ringCheck}><Text style={styles.ringCheckText}>✓</Text></View>
                     : <Text style={styles.ringPreview}>▶</Text>}
@@ -263,14 +266,20 @@ const RiderProfileScreen = () => {
           </Card>
         </View>
 
+        {/* Settings — language */}
         <View style={styles.section}>
-          <Button title="Logout" onPress={handleLogout} variant="danger" />
+          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>{t('profile.settings')}</Text>
+          <LanguageSettingRow accent={COLORS.secondary} />
+        </View>
+
+        <View style={styles.section}>
+          <Button title={t('profile.logout')} onPress={handleLogout} variant="danger" />
         </View>
 
         {/* Delete Account */}
         <View style={styles.section}>
           <TouchableOpacity onPress={handleDeleteAccount} style={styles.deleteAccountBtn}>
-            <Text style={styles.deleteAccountText}>Delete Account</Text>
+            <Text style={styles.deleteAccountText}>{t('profile.deleteAccount')}</Text>
           </TouchableOpacity>
         </View>
 

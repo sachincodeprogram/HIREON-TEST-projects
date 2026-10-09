@@ -17,6 +17,7 @@ import useAppSelector from '../../hooks/useAppSelector';
 import { setActiveOrder, prependOrder } from '../../store/slices/orderSlice';
 import { formatCurrency, formatDistance, truncateAddress } from '../../utils/formatters';
 import { Order } from '../../types';
+import { useTranslation, TranslationKey } from '../../i18n';
 
 type Route = RouteProp<CustomerStackParamList, 'FareEstimate'>;
 
@@ -24,6 +25,7 @@ const FareEstimateScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
   const route      = useRoute<Route>();
   const dispatch   = useAppDispatch();
+  const { t }      = useTranslation();
   const profile    = useAppSelector(s => s.auth.profile);
   const { pickup, delivery, parcel, estimate, paymentMethod } = route.params;
   const isOnlinePayment = paymentMethod === 'ONLINE';
@@ -80,9 +82,9 @@ const FareEstimateScreen = () => {
       navigation.navigate('LiveTracking', { orderId: verified._id });
     } catch (e: any) {
       if (isUserCancelled(e)) {
-        Alert.alert('Payment Cancel Ho Gaya', 'Order abhi bhi pending hai — "Pay Now" dabakar dobara try karein.');
+        Alert.alert(t('fare.payCancelled'), t('fare.payCancelledMsg'));
       } else {
-        Alert.alert('Payment Fail Ho Gayi', e.message || 'Kuch galat ho gaya. Dobara try karein.');
+        Alert.alert(t('fare.payFailed'), e.message || t('fare.payFailedMsg'));
       }
     } finally {
       setPayLoading(false);
@@ -107,32 +109,32 @@ const FareEstimateScreen = () => {
         navigation.navigate('LiveTracking', { orderId: order._id });
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${Math.round(minutes)} min`;
+    if (minutes < 60) return t('unit.min', { n: Math.round(minutes) });
     const h = Math.floor(minutes / 60);
     const m = Math.round(minutes % 60);
-    return m > 0 ? `${h}h ${m}min` : `${h}h`;
+    return m > 0 ? t('unit.hMin', { h, m }) : t('unit.h', { h });
   };
 
   const breakdown = [
-    { label: 'Base Fare',        value: '₹30' },
-    { label: `Distance (${formatDistance(estimate.distance)})`, value: `₹${Math.round(estimate.distance * 10)}` },
-    { label: 'Weight surcharge', value: parcel.weight > 1 ? `₹${Math.round((parcel.weight - 1) * 5)}` : '₹0' },
-    { label: 'Size surcharge',   value: parcel.size === 'large' ? '₹30' : parcel.size === 'medium' ? '₹15' : '₹0' },
-    { label: 'Fragile charge',   value: parcel.isFragile ? '₹20' : '₹0' },
+    { label: t('fare.baseFare'),        value: '₹30' },
+    { label: t('fare.distance', { d: formatDistance(estimate.distance) }), value: `₹${Math.round(estimate.distance * 10)}` },
+    { label: t('fare.weightSurcharge'), value: parcel.weight > 1 ? `₹${Math.round((parcel.weight - 1) * 5)}` : '₹0' },
+    { label: t('fare.sizeSurcharge'),   value: parcel.size === 'large' ? '₹30' : parcel.size === 'medium' ? '₹15' : '₹0' },
+    { label: t('fare.fragileCharge'),   value: parcel.isFragile ? '₹20' : '₹0' },
   ];
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScreenHeader
-        title="Fare Estimate"
-        subtitle="Review before confirming"
+        title={t('fare.title')}
+        subtitle={t('fare.subtitle')}
         canGoBack
         onBack={() => navigation.goBack()}
       />
@@ -169,10 +171,10 @@ const FareEstimateScreen = () => {
             )}
 
             {/* Pickup Marker */}
-            <Marker coordinate={pickupLatLng} title="Pickup" pinColor="green" />
+            <Marker coordinate={pickupLatLng} title={t('fare.pickup')} pinColor="green" />
 
             {/* Delivery Marker */}
-            <Marker coordinate={deliveryLatLng} title="Delivery" pinColor={COLORS.primary} />
+            <Marker coordinate={deliveryLatLng} title={t('fare.delivery')} pinColor={COLORS.primary} />
           </MapView>
 
           {/* Route Info Overlay */}
@@ -196,29 +198,29 @@ const FareEstimateScreen = () => {
 
         {/* Fare Hero */}
         <View style={styles.fareHero}>
-          <Text style={styles.fareHeroLabel}>Estimated Fare</Text>
+          <Text style={styles.fareHeroLabel}>{t('fare.estimatedFare')}</Text>
           <Text style={styles.fareHeroAmount}>{formatCurrency(estimate.estimated)}</Text>
           <Text style={styles.fareHeroSub}>
-            {isOnlinePayment ? 'Pay Online' : 'Cash on Delivery'} · {formatDistance(estimate.distance)}
+            {isOnlinePayment ? t('pay.online') : t('pay.cod')} · {formatDistance(estimate.distance)}
           </Text>
         </View>
 
         {pendingOrder && (
           <View style={styles.pendingNote}>
             <Text style={styles.pendingNoteText}>
-              ⚠️ Order #{pendingOrder.orderId} ban chuka hai, payment abhi baaki hai. "Pay Now" dabakar complete karein.
+              {t('fare.pendingNote', { id: pendingOrder.orderId })}
             </Text>
           </View>
         )}
 
         {/* Route Card */}
         <Card>
-          <Text style={styles.cardTitle}>Route</Text>
+          <Text style={styles.cardTitle}>{t('fare.route')}</Text>
           <View style={styles.routeWrap}>
             <View style={styles.routeRow}>
               <View style={[styles.routeDot, { backgroundColor: COLORS.success }]} />
               <View style={styles.routeInfo}>
-                <Text style={styles.routeLabel}>Pickup</Text>
+                <Text style={styles.routeLabel}>{t('fare.pickup')}</Text>
                 <Text style={styles.routeAddr}>{truncateAddress(pickup.address, 60)}</Text>
               </View>
             </View>
@@ -226,7 +228,7 @@ const FareEstimateScreen = () => {
             <View style={styles.routeRow}>
               <View style={[styles.routeDot, { backgroundColor: COLORS.primary }]} />
               <View style={styles.routeInfo}>
-                <Text style={styles.routeLabel}>Delivery</Text>
+                <Text style={styles.routeLabel}>{t('fare.delivery')}</Text>
                 <Text style={styles.routeAddr}>{truncateAddress(delivery.address, 60)}</Text>
               </View>
             </View>
@@ -235,26 +237,26 @@ const FareEstimateScreen = () => {
 
         {/* Parcel Card */}
         <Card>
-          <Text style={styles.cardTitle}>Parcel Details</Text>
+          <Text style={styles.cardTitle}>{t('book.parcelDetails')}</Text>
           <View style={styles.detailGrid}>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Description</Text>
+              <Text style={styles.detailLabel}>{t('fare.description')}</Text>
               <Text style={styles.detailValue}>{parcel.description}</Text>
             </View>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Weight</Text>
+              <Text style={styles.detailLabel}>{t('fare.weight')}</Text>
               <Text style={styles.detailValue}>{parcel.weight} kg</Text>
             </View>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Size</Text>
+              <Text style={styles.detailLabel}>{t('fare.size')}</Text>
               <Text style={styles.detailValue}>
-                {parcel.size.charAt(0).toUpperCase() + parcel.size.slice(1)}
+                {t(`size.${parcel.size}` as TranslationKey)}
               </Text>
             </View>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Fragile</Text>
+              <Text style={styles.detailLabel}>{t('fare.fragile')}</Text>
               <Text style={[styles.detailValue, parcel.isFragile && { color: COLORS.warning }]}>
-                {parcel.isFragile ? '⚠️ Yes' : 'No'}
+                {parcel.isFragile ? t('fare.yesWarn') : t('common.no')}
               </Text>
             </View>
           </View>
@@ -262,29 +264,29 @@ const FareEstimateScreen = () => {
 
         {/* Fare Breakdown */}
         <Card>
-          <Text style={styles.cardTitle}>Fare Breakdown</Text>
+          <Text style={styles.cardTitle}>{t('fare.breakdown')}</Text>
           {breakdown.map((b, i) => (
             <View
-              key={b.label}
+              key={i}
               style={[styles.breakdownRow, i === breakdown.length - 1 && { marginBottom: 0 }]}>
               <Text style={styles.breakdownLabel}>{b.label}</Text>
               <Text style={styles.breakdownValue}>{b.value}</Text>
             </View>
           ))}
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalLabel}>{t('fare.total')}</Text>
             <Text style={styles.totalValue}>{formatCurrency(estimate.estimated)}</Text>
           </View>
         </Card>
 
         <View style={styles.infoNote}>
           <Text style={styles.infoNoteText}>
-            💡 Final fare may vary slightly based on actual distance and weight.
+            {t('fare.mayVary')}
           </Text>
         </View>
 
         <Button
-          title={pendingOrder ? 'Pay Now' : isOnlinePayment ? 'Pay & Place Order' : 'Confirm & Place Order'}
+          title={pendingOrder ? t('fare.payNow') : isOnlinePayment ? t('fare.payPlace') : t('fare.confirmPlace')}
           onPress={handleConfirm}
           loading={loading || payLoading}
           style={{ marginBottom: 10 }}

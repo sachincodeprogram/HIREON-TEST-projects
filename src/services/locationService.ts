@@ -2,6 +2,7 @@ import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { GOOGLE_MAPS_API_KEY } from '../constants/api';
 import { Coordinates } from '../types';
+import { translate } from '../i18n';
 
 export type LocationResult = {
   coordinates: Coordinates;
@@ -24,11 +25,11 @@ export async function requestLocationPermission(): Promise<PermissionStatus> {
     const result = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       {
-        title: 'Location Permission',
-        message: 'App ko aapki location chahiye pickup address fill karne ke liye.',
-        buttonNeutral: 'Baad mein',
-        buttonNegative: 'Deny',
-        buttonPositive: 'Allow',
+        title: translate('loc.permTitle'),
+        message: translate('loc.permMsg'),
+        buttonNeutral: translate('loc.later'),
+        buttonNegative: translate('loc.deny'),
+        buttonPositive: translate('book.allow'),
       },
     );
     if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
@@ -250,17 +251,17 @@ export async function getCurrentLocation(): Promise<LocationResult> {
   const status = await requestLocationPermission();
   if (status === 'blocked') {
     Alert.alert(
-      'Location Block Hai',
-      'Settings mein jaake Location permission enable karo.',
+      translate('loc.blocked'),
+      translate('loc.blockedMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Settings Kholo', onPress: () => Linking.openSettings() },
+        { text: translate('common.cancel'), style: 'cancel' },
+        { text: translate('loc.openSettings'), onPress: () => Linking.openSettings() },
       ],
     );
     throw new Error('PERMISSION_BLOCKED');
   }
   if (status !== 'granted') {
-    Alert.alert('Permission Denied', 'Location permission nahi mili. Please allow karo.');
+    Alert.alert(translate('loc.denied'), translate('loc.deniedMsg'));
     throw new Error('PERMISSION_DENIED');
   }
   try {
@@ -268,11 +269,11 @@ export async function getCurrentLocation(): Promise<LocationResult> {
     return reverseGeocode(coords);
   } catch (err: any) {
     if (err.message === 'GPS_OFF') {
-      Alert.alert('GPS Band Hai', 'Phone ka GPS/Location on karo aur dobara try karo.');
+      Alert.alert(translate('loc.gpsOff'), translate('loc.gpsOffMsg'));
     } else if (err.message === 'GPS_TIMEOUT') {
-      Alert.alert('Location Nahi Mili', 'GPS signal slow hai. Bahar jaake dobara try karo ya address manually type karo.');
+      Alert.alert(translate('loc.notFound'), translate('loc.timeoutMsg'));
     } else {
-      Alert.alert('Error', 'Location nahi mil rahi. Manually address type karo.');
+      Alert.alert(translate('common.error'), translate('loc.errorMsg'));
     }
     throw err;
   }

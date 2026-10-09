@@ -5,6 +5,7 @@ import { Provider } from 'react-redux';
 import auth from '@react-native-firebase/auth';
 import { store } from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
+import { LanguageProvider } from './src/i18n';
 
 if (__DEV__) {
   LogBox.ignoreAllLogs();
@@ -13,9 +14,11 @@ if (__DEV__) {
 function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
-      <Provider store={store}>
-        <RootNavigator />
-      </Provider>
+      <LanguageProvider>
+        <Provider store={store}>
+          <RootNavigator />
+        </Provider>
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }

@@ -13,9 +13,11 @@ import StatusBadge   from '../../components/common/StatusBadge';
 import ScreenHeader  from '../../components/navigation/ScreenHeader';
 import { Order } from '../../types';
 import { formatCurrency, formatDateTime, formatDistance, truncateAddress } from '../../utils/formatters';
+import { useTranslation } from '../../i18n';
 
 const OrderHistoryScreen = () => {
   const dispatch   = useAppDispatch();
+  const { t }      = useTranslation();
   const orders     = useAppSelector(s => s.order.orders);
   const loading    = useAppSelector(s => s.order.loading);
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
@@ -65,12 +67,12 @@ const OrderHistoryScreen = () => {
           <Text style={styles.fare}>{formatCurrency(item.fare.estimated)}</Text>
           <Text style={styles.distance}>{formatDistance(item.fare.distance)}</Text>
           {['accepted', 'picked_up', 'in_transit'].includes(item.status) && (
-            <Text style={styles.trackBtn}>Track →</Text>
+            <Text style={styles.trackBtn}>{t('hist.track')}</Text>
           )}
           {item.status === 'delivered' && (
             item.rating
               ? <Text style={styles.ratedText}>{'★'.repeat(item.rating)} {item.rating}.0</Text>
-              : <Text style={styles.trackBtn}>Rate karo ⭐</Text>
+              : <Text style={styles.trackBtn}>{t('hist.rate')}</Text>
           )}
         </View>
       </View>
@@ -80,21 +82,22 @@ const OrderHistoryScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScreenHeader
-        title="My Orders"
-        subtitle={orders.length > 0 ? `${orders.length} orders total` : 'Your delivery history'}
+        title={t('hist.title')}
+        subtitle={orders.length > 0 ? t('hist.countTotal', { n: orders.length }) : t('hist.subtitle')}
       />
       <FlatList
         data={orders}
         keyExtractor={o => o._id}
         renderItem={renderItem}
+        extraData={t}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={loadOrders} colors={[COLORS.primary]} />}
         ListEmptyComponent={
           !loading ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={styles.emptyTitle}>No orders yet</Text>
-              <Text style={styles.emptySubtitle}>Your delivery history will appear here</Text>
+              <Text style={styles.emptyTitle}>{t('cdash.noOrders')}</Text>
+              <Text style={styles.emptySubtitle}>{t('hist.emptySub')}</Text>
             </View>
           ) : null
         }

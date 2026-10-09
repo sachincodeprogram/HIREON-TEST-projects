@@ -12,20 +12,23 @@ import useAppSelector from '../../hooks/useAppSelector';
 import { getWallet, getWalletTransactions, createRechargeOrder, verifyRecharge } from '../../services/walletService';
 import { openRazorpayCheckout, isUserCancelled } from '../../services/razorpayCheckout';
 import { Wallet, WalletTransaction } from '../../types';
+import { useTranslation, TranslationKey } from '../../i18n';
 
 const QUICK_AMOUNTS = [1, 100, 200, 500, 1000];
 
-const TXN_META: Record<WalletTransaction['type'], { icon: string; label: string; credit: boolean }> = {
-  EARNING:           { icon: '💰', label: 'Order Earning',    credit: true },
-  RECHARGE:          { icon: '🔄', label: 'Wallet Recharge',  credit: true },
-  REFUND:            { icon: '↩️', label: 'Refund',           credit: true },
-  COMMISSION_DEBIT:  { icon: '📉', label: 'Commission',       credit: false },
+// label translation key hai — render me t() lagta hai.
+const TXN_META: Record<WalletTransaction['type'], { icon: string; label: TranslationKey; credit: boolean }> = {
+  EARNING:           { icon: '💰', label: 'wallet.txnEarning',    credit: true },
+  RECHARGE:          { icon: '🔄', label: 'wallet.txnRecharge',   credit: true },
+  REFUND:            { icon: '↩️', label: 'wallet.txnRefund',     credit: true },
+  COMMISSION_DEBIT:  { icon: '📉', label: 'wallet.txnCommission', credit: false },
 };
 
 const rupees = (paise: number) => (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 const WalletScreen = () => {
   const navigation = useNavigation();
+  const { t }       = useTranslation();
   const profile     = useAppSelector(s => s.auth.profile);
 
   const [wallet,       setWallet]       = useState<Wallet | null>(null);
@@ -38,9 +41,9 @@ const WalletScreen = () => {
 
   const load = useCallback(async () => {
     try {
-      const [w, t] = await Promise.all([getWallet(), getWalletTransactions(1)]);
+      const [w, txns] = await Promise.all([getWallet(), getWalletTransactions(1)]);
       setWallet(w);
-      setTransactions(t.transactions);
+      setTransactions(txns.transactions);
     } catch { /* silent — wallet card shows nothing, retry on next focus */ }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -53,7 +56,7 @@ const WalletScreen = () => {
 
   const handleRecharge = async () => {
     if (!selectedAmount || selectedAmount < 1) {
-      return Alert.alert('Amount Daalo', 'Recharge amount kam se kam ₹1 hona chahiye.');
+      return Alert.alert(t('wallet.enterAmount'), t('wallet.minAmount'));
     }
     try {
       setRecharging(true);
@@ -71,11 +74,11 @@ const WalletScreen = () => {
       });
       setRechargeAmount(null);
       setCustomAmount('');
-      Alert.alert('Recharge Ho Gaya ✅', 'Wallet balance update ho gaya hai.');
+      Alert.alert(t('wallet.rechargeDone'), t('wallet.rechargeDoneMsg'));
       load();
     } catch (e: any) {
       if (!isUserCancelled(e)) {
-        Alert.alert('Recharge Fail Ho Gaya', e.message || 'Kuch galat ho gaya. Dobara try karein.');
+        Alert.alert(t('wallet.rechargeFailed'), e.message || t('fare.payFailedMsg'));
       }
     } finally {
       setRecharging(false);
@@ -88,7 +91,7 @@ const WalletScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScreenHeader title="My Wallet" subtitle="Balance, recharge & history" canGoBack onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('profile.myWallet')} subtitle={t('wallet.subtitle')} canGoBack onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -96,7 +99,7 @@ const WalletScreen = () => {
 
         {/* Balance Hero */}
         <View style={[styles.balanceHero, isNegative && styles.balanceHeroNegative]}>
-          <Text style={styles.balanceLabel}>Wallet Balance</Text>
+          <Text style={styles.balanceLabel}>{t('wallet.balance')}</Text>
           {loading ? (
             <ActivityIndicator color="#fff" style={{ marginVertical: 14 }} />
           ) : (
@@ -104,7 +107,7 @@ const WalletScreen = () => {
           )}
           {wallet && (
             <Text style={styles.balanceSub}>
-              Minimum allowed: -₹{rupees(Math.abs(wallet.minBalance))}
+              {t('wallet.minAllowed', { amount: `-₹${rupees(Math.abs(wallet.minBalance))}` })}
             </Text>
           )}
         </View>
@@ -113,9 +116,9 @@ const WalletScreen = () => {
           <View style={styles.blockedBanner}>
             <Text style={styles.blockedIcon}>⚠️</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.blockedTitle}>COD Orders Blocked</Text>
+              <Text style={styles.blockedTitle}>{t('wallet.codBlocked')}</Text>
               <Text style={styles.blockedText}>
-                Balance minimum se neeche hai — naye COD orders lene ke liye pehle recharge karein.
+                {t('wallet.codBlockedMsg')}
               </Text>
             </View>
           </View>
@@ -123,7 +126,7 @@ const WalletScreen = () => {
 
         {/* Recharge */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recharge Wallet</Text>
+          <Text style={styles.sectionTitle}>{t('rdash.rechargeNow')}</Text>
           <Card>
             <View style={styles.chipRow}>
               {QUICK_AMOUNTS.map(amt => {
@@ -139,16 +142,16 @@ const WalletScreen = () => {
               })}
             </View>
             <Input
-              label="Ya custom amount daalo"
+              label={t('wallet.customAmount')}
               value={customAmount}
-              onChangeText={t => { setCustomAmount(t.replace(/[^0-9.]/g, '')); setRechargeAmount(null); }}
-              placeholder="₹ Amount"
+              onChangeText={v => { setCustomAmount(v.replace(/[^0-9.]/g, '')); setRechargeAmount(null); }}
+              placeholder={t('wallet.amountPh')}
               keyboardType="decimal-pad"
               leftIcon="₹"
             />
-            <Text style={styles.methodsHint}>UPI · GPay · PhonePe · Paytm · WhatsApp Pay · QR · Cards</Text>
+            <Text style={styles.methodsHint}>{t('wallet.methods')}</Text>
             <Button
-              title={selectedAmount > 0 ? `Recharge ₹${selectedAmount}` : 'Recharge'}
+              title={selectedAmount > 0 ? t('wallet.rechargeAmt', { amount: selectedAmount }) : t('wallet.recharge')}
               onPress={handleRecharge}
               loading={recharging}
               disabled={!selectedAmount}
@@ -160,10 +163,10 @@ const WalletScreen = () => {
 
         {/* Transaction History */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
+          <Text style={styles.sectionTitle}>{t('wallet.recentTxns')}</Text>
           {transactions.length === 0 ? (
             <Card>
-              <Text style={styles.emptyText}>Abhi tak koi transaction nahi hai.</Text>
+              <Text style={styles.emptyText}>{t('wallet.noTxns')}</Text>
             </Card>
           ) : (
             transactions.map((txn, i) => {
@@ -174,7 +177,7 @@ const WalletScreen = () => {
                     <Text style={styles.txnIcon}>{meta.icon}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.txnLabel}>{meta.label}</Text>
+                    <Text style={styles.txnLabel}>{t(meta.label)}</Text>
                     <Text style={styles.txnDesc} numberOfLines={1}>{txn.description}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>

@@ -12,9 +12,12 @@ import Input  from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { updateProfile, deleteAccount } from '../../services/authService';
 import { setProfile } from '../../store/slices/authSlice';
+import { LanguageSettingRow } from '../../components/common/LanguagePicker';
+import { useTranslation } from '../../i18n';
 
 const CustomerProfileScreen = () => {
   const dispatch = useAppDispatch();
+  const { t }    = useTranslation();
   const profile  = useAppSelector(s => s.auth.profile);
   const orders   = useAppSelector(s => s.order.orders);
 
@@ -33,17 +36,17 @@ const CustomerProfileScreen = () => {
       dispatch(setProfile(updated));
       setEditing(false);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('profile.logout'), t('profile.logoutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Logout', style: 'destructive', onPress: async () => {
+        text: t('profile.logout'), style: 'destructive', onPress: async () => {
           clearDevPhone();
           try { await auth().signOut(); } catch {}
           dispatch(clearAuth());
@@ -54,16 +57,16 @@ const CustomerProfileScreen = () => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'This permanently deletes your profile, saved addresses, and order history. This cannot be undone. Are you sure?',
+      t('profile.deleteAccount'),
+      t('profile.deleteCustomerMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive', onPress: () => {
-            Alert.alert('Confirm Deletion', 'Tap "Delete Forever" to permanently delete your account.', [
-              { text: 'Cancel', style: 'cancel' },
+          text: t('common.delete'), style: 'destructive', onPress: () => {
+            Alert.alert(t('profile.confirmDeletion'), t('profile.confirmDeletionMsg'), [
+              { text: t('common.cancel'), style: 'cancel' },
               {
-                text: 'Delete Forever', style: 'destructive', onPress: async () => {
+                text: t('profile.deleteForever'), style: 'destructive', onPress: async () => {
                   try {
                     setLoading(true);
                     await deleteAccount();
@@ -71,7 +74,7 @@ const CustomerProfileScreen = () => {
                     try { await auth().signOut(); } catch {}
                     dispatch(clearAuth());
                   } catch (e: any) {
-                    Alert.alert('Could not delete account', e.message);
+                    Alert.alert(t('profile.deleteFailed'), e.message);
                   } finally {
                     setLoading(false);
                   }
@@ -98,7 +101,7 @@ const CustomerProfileScreen = () => {
           <Text style={styles.heroName}>{profile?.name}</Text>
           {profile?.email ? <Text style={styles.heroEmail}>{profile.email}</Text> : null}
           <View style={styles.rolePill}>
-            <Text style={styles.rolePillText}>Customer</Text>
+            <Text style={styles.rolePillText}>{t('profile.customer')}</Text>
           </View>
         </View>
 
@@ -106,27 +109,27 @@ const CustomerProfileScreen = () => {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{orders.length}</Text>
-            <Text style={styles.statLabel}>Total Orders</Text>
+            <Text style={styles.statLabel}>{t('profile.totalOrders')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: COLORS.success }]}>{delivered}</Text>
-            <Text style={styles.statLabel}>Delivered</Text>
+            <Text style={styles.statLabel}>{t('profile.delivered')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: COLORS.warning }]}>{orders.length - delivered}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statLabel}>{t('profile.active')}</Text>
           </View>
         </View>
 
         {/* Profile Info */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>Profile Information</Text>
+            <Text style={styles.sectionTitle}>{t('profile.info')}</Text>
             {!editing && (
               <TouchableOpacity onPress={() => setEditing(true)} style={styles.editBtn}>
-                <Text style={styles.editBtnText}>Edit</Text>
+                <Text style={styles.editBtnText}>{t('common.edit')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -134,19 +137,19 @@ const CustomerProfileScreen = () => {
           <Card>
             {editing ? (
               <>
-                <Input label="Full Name"     value={name}  onChangeText={setName}  placeholder="Your name" leftIcon="👤" />
-                <Input label="Phone Number"  value={phone} onChangeText={setPhone} placeholder="10-digit number" keyboardType="phone-pad" leftIcon="📞" />
+                <Input label={t('profile.fullName')}    value={name}  onChangeText={setName}  placeholder={t('profile.yourName')} leftIcon="👤" />
+                <Input label={t('profile.phoneNumber')} value={phone} onChangeText={setPhone} placeholder={t('profile.phonePlaceholder')} keyboardType="phone-pad" leftIcon="📞" />
                 <View style={styles.editActions}>
-                  <Button title="Save Changes" onPress={handleSave} loading={loading} style={{ flex: 1 }} />
-                  <Button title="Cancel" onPress={() => setEditing(false)} variant="ghost" style={{ flex: 1 }} />
+                  <Button title={t('common.saveChanges')} onPress={handleSave} loading={loading} style={{ flex: 1 }} />
+                  <Button title={t('common.cancel')} onPress={() => setEditing(false)} variant="ghost" style={{ flex: 1 }} />
                 </View>
               </>
             ) : (
               <>
                 {[
-                  { label: 'Full Name', value: profile?.name },
-                  { label: 'Email',     value: profile?.email },
-                  { label: 'Phone',     value: profile?.phone || 'Not set' },
+                  { label: t('profile.fullName'), value: profile?.name },
+                  { label: t('profile.email'),    value: profile?.email },
+                  { label: t('profile.phone'),    value: profile?.phone || t('common.notSet') },
                 ].map((item, i, arr) => (
                   <View key={item.label} style={[styles.infoRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
                     <Text style={styles.infoLabel}>{item.label}</Text>
@@ -158,15 +161,21 @@ const CustomerProfileScreen = () => {
           </Card>
         </View>
 
+        {/* Settings — language */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>{t('profile.settings')}</Text>
+          <LanguageSettingRow accent={COLORS.primary} />
+        </View>
+
         {/* Logout */}
         <View style={styles.section}>
-          <Button title="Logout" onPress={handleLogout} variant="danger" />
+          <Button title={t('profile.logout')} onPress={handleLogout} variant="danger" />
         </View>
 
         {/* Delete Account */}
         <View style={styles.section}>
           <TouchableOpacity onPress={handleDeleteAccount} style={styles.deleteAccountBtn}>
-            <Text style={styles.deleteAccountText}>Delete Account</Text>
+            <Text style={styles.deleteAccountText}>{t('profile.deleteAccount')}</Text>
           </TouchableOpacity>
         </View>
 

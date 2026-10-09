@@ -12,27 +12,30 @@ import Button from '../../components/common/Button';
 import { registerUser } from '../../services/authService';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { setProfile } from '../../store/slices/authSlice';
+import { useTranslation, TranslationKey } from '../../i18n';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'RoleSelect'>;
   route:      RouteProp<AuthStackParamList, 'RoleSelect'>;
 };
 
-const ROLES: { value: UserRole; label: string; icon: string; desc: string; color: string; bg: string }[] = [
+// label/desc translation keys hain — render ke waqt t() se text banta hai.
+const ROLES: { value: UserRole; label: TranslationKey; icon: string; desc: TranslationKey; color: string; bg: string }[] = [
   {
-    value: 'customer', label: 'Customer', icon: '📦',
-    desc: 'Send parcels anywhere and track them in real-time',
+    value: 'customer', label: 'profile.customer', icon: '📦',
+    desc: 'role.customerDesc',
     color: COLORS.primary, bg: COLORS.primaryBg,
   },
   {
-    value: 'rider', label: 'Rider', icon: '🏍️',
-    desc: 'Deliver parcels and earn money on your own schedule',
+    value: 'rider', label: 'profile.rider', icon: '🏍️',
+    desc: 'role.riderDesc',
     color: COLORS.secondary, bg: COLORS.secondaryBg,
   },
 ];
 
 const RoleSelectScreen: React.FC<Props> = ({ route }) => {
   const dispatch = useAppDispatch();
+  const { t }    = useTranslation();
   const { name, phone } = route.params;
   const [selected,      setSelected]      = useState<UserRole | null>(null);
   const [vehicleType,   setVehicleType]   = useState('');
@@ -40,16 +43,16 @@ const RoleSelectScreen: React.FC<Props> = ({ route }) => {
   const [loading,       setLoading]       = useState(false);
 
   const handleRegister = async () => {
-    if (!selected) return Alert.alert('Select a Role', 'Please choose how you want to use HIREON.');
+    if (!selected) return Alert.alert(t('role.selectRole'), t('role.selectRoleMsg'));
     if (selected === 'rider' && (!vehicleType.trim() || !vehicleNumber.trim())) {
-      return Alert.alert('Vehicle Details Required', 'Please fill in your vehicle information.');
+      return Alert.alert(t('role.vehicleRequired'), t('role.vehicleRequiredMsg'));
     }
     try {
       setLoading(true);
       const profile = await registerUser({ name, phone, role: selected, vehicleType, vehicleNumber });
       dispatch(setProfile(profile));
     } catch (e: any) {
-      Alert.alert('Registration Failed', e.message);
+      Alert.alert(t('role.registrationFailed'), e.message);
     } finally {
       setLoading(false);
     }
@@ -62,9 +65,9 @@ const RoleSelectScreen: React.FC<Props> = ({ route }) => {
       <View style={styles.header}>
         <SafeAreaView edges={['top']}>
           <View style={styles.headerContent}>
-            <Text style={styles.hi}>Hi, {name.split(' ')[0]}!</Text>
-            <Text style={styles.headerTitle}>How will you use HIREON?</Text>
-            <Text style={styles.headerSub}>You can always change this later</Text>
+            <Text style={styles.hi}>{t('role.hi', { name: name.split(' ')[0] })}</Text>
+            <Text style={styles.headerTitle}>{t('role.title')}</Text>
+            <Text style={styles.headerSub}>{t('role.subtitle')}</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -89,9 +92,9 @@ const RoleSelectScreen: React.FC<Props> = ({ route }) => {
             </View>
             <View style={styles.roleInfo}>
               <Text style={[styles.roleLabel, selected === r.value && { color: r.color }]}>
-                {r.label}
+                {t(r.label)}
               </Text>
-              <Text style={styles.roleDesc}>{r.desc}</Text>
+              <Text style={styles.roleDesc}>{t(r.desc)}</Text>
             </View>
             <View style={[
               styles.radioOuter,
@@ -106,35 +109,35 @@ const RoleSelectScreen: React.FC<Props> = ({ route }) => {
           <View style={styles.riderSection}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionLine} />
-              <Text style={styles.sectionLabel}>Vehicle Details</Text>
+              <Text style={styles.sectionLabel}>{t('role.vehicleDetails')}</Text>
               <View style={styles.sectionLine} />
             </View>
             <Input
-              label="Vehicle Type"
+              label={t('profile.vehicleType')}
               value={vehicleType}
               onChangeText={setVehicleType}
-              placeholder="e.g. Bike, Scooter, Cycle"
+              placeholder={t('role.vehicleTypePlaceholder')}
               leftIcon="🚗"
             />
             <Input
-              label="Vehicle Number"
+              label={t('profile.vehicleNumber')}
               value={vehicleNumber}
               onChangeText={setVehicleNumber}
-              placeholder="e.g. DL01AB1234"
+              placeholder={t('role.vehicleNumberPlaceholder')}
               leftIcon="🔢"
             />
           </View>
         )}
 
         <Button
-          title="Get Started"
+          title={t('role.getStarted')}
           onPress={handleRegister}
           loading={loading}
           style={styles.btn}
         />
 
         <Text style={styles.terms}>
-          By registering, you agree to HIREON's Terms of Service
+          {t('role.terms')}
         </Text>
 
       </ScrollView>

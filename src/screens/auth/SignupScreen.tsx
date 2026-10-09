@@ -10,6 +10,7 @@ import { AuthStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/api';
 import Input  from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import { useTranslation } from '../../i18n';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Signup'>;
@@ -23,6 +24,7 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
   // hai (readonly). Google login se aaya user: ye khaali hota hai — usko yahin
   // ek plain text field dete hain taaki OTP ke bina number add kar sake.
   const { phone: verifiedPhone } = route.params;
+  const { t } = useTranslation();
   const isGoogleFlow = !verifiedPhone;
   const [name,       setName]       = useState('');
   const [phoneInput, setPhoneInput] = useState('');
@@ -38,17 +40,17 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleNext = () => {
     if (!name.trim()) {
-      Alert.alert('Name Required', 'Please enter your full name to continue.');
+      Alert.alert(t('signup.nameRequired'), t('signup.nameRequiredMsg'));
       return;
     }
     if (name.trim().length < 2) {
-      Alert.alert('Invalid Name', 'Name must be at least 2 characters.');
+      Alert.alert(t('signup.invalidName'), t('signup.invalidNameMsg'));
       return;
     }
     let phone = verifiedPhone;
     if (isGoogleFlow && phoneInput.trim()) {
       if (!isValidPhone(phoneInput)) {
-        Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9 — or leave it blank and add it later from Profile.');
+        Alert.alert(t('login.invalidNumber'), t('signup.invalidNumberMsg'));
         return;
       }
       phone = phoneInput.trim();
@@ -66,8 +68,8 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.iconCircle}>
               <Text style={styles.waveEmoji}>👋</Text>
             </View>
-            <Text style={styles.headerTitle}>Almost there!</Text>
-            <Text style={styles.headerSub}>One last step to set up your account</Text>
+            <Text style={styles.headerTitle}>{t('signup.almostThere')}</Text>
+            <Text style={styles.headerSub}>{t('signup.oneLastStep')}</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -80,18 +82,17 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {isGoogleFlow ? (
             <>
-              <Text style={styles.inputSectionTitle}>Mobile Number (optional)</Text>
+              <Text style={styles.inputSectionTitle}>{t('signup.mobileOptional')}</Text>
               <Input
                 value={phoneInput}
                 onChangeText={t => setPhoneInput(t.replace(/[^0-9]/g, '').slice(0, 10))}
-                placeholder="10-digit mobile number"
+                placeholder={t('login.mobilePlaceholder')}
                 leftIcon="📞"
                 keyboardType="phone-pad"
               />
               <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
-                  Signed in with Google — no OTP needed. Add your number now, or
-                  skip and add it later from Profile.
+                  {t('signup.googleInfo')}
                 </Text>
               </View>
             </>
@@ -99,28 +100,28 @@ const SignupScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.verifiedRow}>
               <View style={styles.verifiedDot} />
               <View style={styles.verifiedText}>
-                <Text style={styles.verifiedLabel}>Verified Mobile</Text>
+                <Text style={styles.verifiedLabel}>{t('signup.verifiedMobile')}</Text>
                 <Text style={styles.verifiedPhone}>{verifiedPhone}</Text>
               </View>
               <Text style={styles.checkmark}>✓</Text>
             </View>
           )}
 
-          <Text style={styles.inputSectionTitle}>Your Name</Text>
+          <Text style={styles.inputSectionTitle}>{t('signup.yourName')}</Text>
           <Input
             value={name}
             onChangeText={setName}
-            placeholder="Enter your full name"
+            placeholder={t('signup.namePlaceholder')}
             leftIcon="👤"
           />
 
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-              Your name will be shown to riders and customers during deliveries.
+              {t('signup.nameInfo')}
             </Text>
           </View>
 
-          <Button title="Continue" onPress={handleNext} style={styles.btn} />
+          <Button title={t('common.continue')} onPress={handleNext} style={styles.btn} />
 
         </ScrollView>
       </KeyboardAvoidingView>

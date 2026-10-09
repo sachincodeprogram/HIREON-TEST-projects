@@ -8,6 +8,7 @@ import { COLORS, GOOGLE_MAPS_API_KEY } from '../../constants/api';
 import { getCurrentLocation, forwardGeocode, getQuickPosition } from '../../services/locationService';
 import MapPinConfirm from './MapPinConfirm';
 import { Coordinates } from '../../types';
+import { useTranslation } from '../../i18n';
 
 interface Props {
   label: string;
@@ -55,6 +56,7 @@ const AddressSearchInput: React.FC<Props> = ({
   onSelect,
   onTextChange,
 }) => {
+  const { t } = useTranslation();
   const ref = useRef<GooglePlacesAutocompleteRef>(null);
   const [locLoading, setLocLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -125,8 +127,8 @@ const AddressSearchInput: React.FC<Props> = ({
       if (!center) center = biasCoords || (await getQuickPosition());
       if (!center) {
         Alert.alert(
-          'Location Nahi Mili',
-          'Pehle address type karo ya paas ka landmark search karo — phir 📌 daba ke map par pin lagao.',
+          t('loc.notFound'),
+          t('loc.typeFirst'),
         );
         return;
       }
@@ -152,8 +154,8 @@ const AddressSearchInput: React.FC<Props> = ({
               // Place Details fail (network/quota) — chupchaap kuch na hone se
               // user atak jaata tha; typed-address fallback ka raasta batao.
               Alert.alert(
-                'Location Load Nahi Hui',
-                'Internet check karke dobara try karo, ya 📌 daba ke map par pin lagao.',
+                t('loc.loadFailed'),
+                t('loc.loadFailedMsg'),
               );
               return;
             }
@@ -197,7 +199,7 @@ const AddressSearchInput: React.FC<Props> = ({
           onPress={handlePinPress}
           disabled={geoLoading}
           activeOpacity={0.7}
-          accessibilityLabel="Exact location map par pin karo">
+          accessibilityLabel={t('loc.pinA11y')}>
           {geoLoading ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (
@@ -226,7 +228,7 @@ const AddressSearchInput: React.FC<Props> = ({
             <Text style={styles.gpsIcon}>🎯</Text>
           )}
           <Text style={[styles.gpsBtnText, locLoading && { color: COLORS.textMuted }]}>
-            {locLoading ? 'Location dhoondh rahe hain...' : 'Current Location Use Karo'}
+            {locLoading ? t('loc.finding') : t('loc.useCurrent')}
           </Text>
         </TouchableOpacity>
       )}
@@ -235,7 +237,7 @@ const AddressSearchInput: React.FC<Props> = ({
         visible={mapVisible}
         initialCoords={mapInit?.coords || { lat: 28.4744, lng: 77.5040 }}
         initialAddress={mapInit?.address || ''}
-        title={label === 'Address' ? 'Exact Location Pin Karo' : label}
+        title={label === t('book.address') ? t('map.pinTitle') : label}
         onConfirm={handleMapConfirm}
         onClose={() => setMapVisible(false)}
       />

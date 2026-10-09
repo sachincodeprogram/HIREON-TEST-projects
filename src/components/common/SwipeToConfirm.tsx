@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, PanResponder, ActivityIndicator, LayoutChangeEvent } from 'react-native';
 import { COLORS } from '../../constants/api';
 import { RADIUS } from '../../constants/theme';
+import { useTranslation } from '../../i18n';
 
 const THUMB_SIZE = 52;
 const TRACK_PADDING = 4;
@@ -24,8 +25,9 @@ interface Props {
 // delivery me cash-received confirm karne ke liye — accidental tap se
 // commission cut na ho, isliye deliberate swipe gesture chahiye.
 const SwipeToConfirm: React.FC<Props> = ({
-  label, confirmingLabel = 'Confirming…', icon = '💵', color = COLORS.success, disabled, onConfirm,
+  label, confirmingLabel, icon = '💵', color = COLORS.success, disabled, onConfirm,
 }) => {
+  const { t } = useTranslation();
   const [trackWidth, setTrackWidth] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
@@ -83,7 +85,7 @@ const SwipeToConfirm: React.FC<Props> = ({
       onLayout={onTrackLayout}>
       <Animated.View style={[styles.fill, { width: fillWidth, backgroundColor: color + '26' }]} />
       <Animated.Text style={[styles.label, { color, opacity: labelOpacity }]} numberOfLines={1}>
-        {confirming ? confirmingLabel : done ? 'Confirmed ✓' : label}
+        {confirming ? (confirmingLabel || t('active.confirming')) : done ? t('swipe.confirmed') : label}
       </Animated.Text>
       <Animated.View
         {...(disabled || done ? {} : panResponder.panHandlers)}

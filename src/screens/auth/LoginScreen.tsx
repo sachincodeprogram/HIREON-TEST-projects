@@ -13,6 +13,8 @@ import { getMyProfile } from '../../services/authService';
 import { setDevPhone } from '../../services/apiClient';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { setProfile } from '../../store/slices/authSlice';
+import { LanguagePill } from '../../components/common/LanguagePicker';
+import { useTranslation } from '../../i18n';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -28,6 +30,7 @@ GoogleSignin.configure({
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const dispatch = useAppDispatch();
+  const { t }    = useTranslation();
 
   const [phone,         setPhone]         = useState('');
   const [sendLoading,   setSendLoading]   = useState(false);
@@ -61,9 +64,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         navigation.navigate('Signup', { phone: '+91' + phone.trim() });
       } else {
         Alert.alert(
-          'Connection Problem',
-          'Verified, but we could not load your profile. Please check your internet and retry.',
-          [{ text: 'Retry', onPress: () => { finishLogin(); } }],
+          t('login.connectionProblem'),
+          t('login.profileLoadFailed'),
+          [{ text: t('common.retry'), onPress: () => { finishLogin(); } }],
         );
       }
     } finally {
@@ -117,7 +120,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const handleSendOtp = async () => {
     const trimmed = phone.trim();
     if (!isValidPhone(trimmed)) {
-      Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.');
+      Alert.alert(t('login.invalidNumber'), t('login.invalidNumberMsg'));
       return;
     }
     if (__DEV__ && TEST_PHONES.includes(trimmed)) {
@@ -154,7 +157,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleVerifyOtp = async () => {
     if (otp.trim().length !== 6) {
-      Alert.alert('Invalid OTP', 'Please enter the 6-digit OTP.');
+      Alert.alert(t('login.invalidOtp'), t('login.invalidOtpMsg'));
       return;
     }
     // Auto-verify pehle hi ho chuka ho to confirm() mat karo — seedha aage.
@@ -165,7 +168,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
     if (!confirmationRef.current) {
-      Alert.alert('Error', 'Session expired. Please request a new OTP.');
+      Alert.alert(t('common.error'), t('login.sessionExpired'));
       setStep('phone');
       return;
     }
@@ -181,7 +184,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
       if (error?.code === 'auth/session-expired' || error?.code === 'auth/code-expired') {
-        Alert.alert('OTP Expired', 'This OTP is no longer valid. Please request a new one.');
+        Alert.alert(t('login.otpExpired'), t('login.otpExpiredMsg'));
         handleResendOtp();
         return;
       }
@@ -219,16 +222,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleFirebaseError = (error: any) => {
     const code = error?.code || '';
-    let message = 'Something went wrong. Please try again.';
-    if (code === 'auth/invalid-phone-number')          message = 'Invalid phone number.';
-    else if (code === 'auth/too-many-requests')         message = 'Too many attempts. Please wait and try again.';
-    else if (code === 'auth/invalid-verification-code') message = 'Wrong OTP. Please check and try again.';
+    let message = t('login.err.generic');
+    if (code === 'auth/invalid-phone-number')          message = t('login.err.invalidPhone');
+    else if (code === 'auth/too-many-requests')         message = t('login.err.tooMany');
+    else if (code === 'auth/invalid-verification-code') message = t('login.err.wrongOtp');
     else if (code === 'auth/code-expired' ||
-             code === 'auth/session-expired')           message = 'OTP expired. Please request a new one.';
-    else if (code === 'auth/operation-not-allowed')     message = 'Phone auth not enabled.';
-    else if (code === 'auth/network-request-failed')    message = 'Network error. Check your internet connection.';
+             code === 'auth/session-expired')           message = t('login.err.otpExpired');
+    else if (code === 'auth/operation-not-allowed')     message = t('login.err.notEnabled');
+    else if (code === 'auth/network-request-failed')    message = t('login.err.network');
     else if (error?.message)                            message = error.message;
-    Alert.alert('Error', message);
+    Alert.alert(t('common.error'), message);
   };
 
   return (
@@ -238,12 +241,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       {/* Brand Header */}
       <View style={styles.header}>
         <SafeAreaView edges={['top']}>
+          {/* Login se pehle hi language chun sake */}
+          <View style={styles.langRow}>
+            <LanguagePill />
+          </View>
           <View style={styles.headerContent}>
             <View style={styles.logoBox}>
               <Text style={styles.logoText}>H</Text>
             </View>
             <Text style={styles.appName}>HIREON</Text>
-            <Text style={styles.tagline}>Fast & Reliable Parcel Delivery</Text>
+            <Text style={styles.tagline}>{t('login.tagline')}</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -257,8 +264,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
           {step === 'phone' && (
             <View style={styles.sheet}>
-              <Text style={styles.stepTitle}>Enter Mobile Number</Text>
-              <Text style={styles.stepSubtitle}>We'll send a 6-digit OTP to verify your number</Text>
+              <Text style={styles.stepTitle}>{t('login.enterMobile')}</Text>
+              <Text style={styles.stepSubtitle}>{t('login.otpWillBeSent')}</Text>
 
               <View style={styles.phoneRow}>
                 <View style={styles.countryCode}>
@@ -270,7 +277,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                   style={styles.phoneInput}
                   value={phone}
                   onChangeText={text => setPhone(text.replace(/[^0-9]/g, ''))}
-                  placeholder="10-digit mobile number"
+                  placeholder={t('login.mobilePlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                   keyboardType="phone-pad"
                   maxLength={10}
@@ -284,12 +291,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.85}>
                 {sendLoading
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.primaryBtnText}>Send OTP</Text>}
+                  : <Text style={styles.primaryBtnText}>{t('login.sendOtp')}</Text>}
               </TouchableOpacity>
 
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
+                <Text style={styles.dividerText}>{t('login.or')}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -303,13 +310,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                   : (
                     <View style={styles.googleBtnInner}>
                       <Text style={styles.googleIcon}>G</Text>
-                      <Text style={styles.googleBtnText}>Continue with Google</Text>
+                      <Text style={styles.googleBtnText}>{t('login.google')}</Text>
                     </View>
                   )}
               </TouchableOpacity>
 
               <Text style={styles.noteText}>
-                By continuing, you agree to our Terms of Service and Privacy Policy
+                {t('login.terms')}
               </Text>
             </View>
           )}
@@ -318,12 +325,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.sheet}>
               <TouchableOpacity onPress={() => { setStep('phone'); setOtp(''); }} style={styles.backRow}>
                 <Text style={styles.backArrow}>‹</Text>
-                <Text style={styles.backText}>Change Number</Text>
+                <Text style={styles.backText}>{t('login.changeNumber')}</Text>
               </TouchableOpacity>
 
-              <Text style={styles.stepTitle}>Verify OTP</Text>
+              <Text style={styles.stepTitle}>{t('login.verifyOtp')}</Text>
               <Text style={styles.stepSubtitle}>
-                Code sent to{' '}
+                {t('login.codeSentTo')}{' '}
                 <Text style={styles.phoneHighlight}>+91 {phone}</Text>
               </Text>
 
@@ -342,10 +349,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.resendRow}>
                 {countdown > 0
                   ? <Text style={styles.countdownText}>
-                      Resend in <Text style={styles.countdownNum}>{countdown}s</Text>
+                      {t('login.resendIn')} <Text style={styles.countdownNum}>{countdown}s</Text>
                     </Text>
                   : <TouchableOpacity onPress={handleResendOtp} activeOpacity={0.7}>
-                      <Text style={styles.resendText}>Resend OTP</Text>
+                      <Text style={styles.resendText}>{t('login.resendOtp')}</Text>
                     </TouchableOpacity>
                 }
               </View>
@@ -357,7 +364,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.85}>
                 {verifyLoading
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.primaryBtnText}>Verify & Continue</Text>}
+                  : <Text style={styles.primaryBtnText}>{t('login.verifyContinue')}</Text>}
               </TouchableOpacity>
             </View>
           )}
@@ -372,6 +379,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.primary },
 
   header: { backgroundColor: COLORS.primary },
+  langRow: { alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 8 },
   headerContent: {
     alignItems: 'center',
     paddingTop: 24,

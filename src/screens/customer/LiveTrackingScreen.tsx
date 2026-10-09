@@ -15,6 +15,7 @@ import Button      from '../../components/common/Button';
 import AddressSearchInput from '../../components/common/AddressSearchInput';
 import { Order, Coordinates, UserProfile } from '../../types';
 import { formatCurrency, truncateAddress } from '../../utils/formatters';
+import { useTranslation } from '../../i18n';
 
 type Route = RouteProp<CustomerStackParamList, 'LiveTracking'>;
 
@@ -104,6 +105,7 @@ const LiveTrackingScreen = () => {
   const route      = useRoute<Route>();
   const navigation = useNavigation();
   const dispatch   = useAppDispatch();
+  const { t }      = useTranslation();
   const { orderId } = route.params;
 
   const mapRef     = useRef<MapView>(null);
@@ -319,7 +321,7 @@ const LiveTrackingScreen = () => {
       setNoRider(false);
       setSearchStart(Date.now());
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setRetrying(false);
     }
@@ -343,17 +345,17 @@ const LiveTrackingScreen = () => {
       setEditingAddress(false);
       const diff = updated.fare.estimated - oldFare;
       Alert.alert(
-        'Delivery Address Badal Gaya ✅',
-        `Naya fare: ${formatCurrency(updated.fare.estimated)}` +
+        t('track.addrChanged'),
+        t('track.newFare', { fare: formatCurrency(updated.fare.estimated) }) +
           (diff > 0
-            ? ` (+${formatCurrency(diff)} doori badhne se add hua)`
+            ? t('track.fareUp', { diff: formatCurrency(diff) })
             : diff < 0
-              ? ` (${formatCurrency(diff)} doori kam hone se ghata)`
-              : ' (fare me koi badlav nahi)') +
-          '\nRider ko naya address bhej diya gaya hai.',
+              ? t('track.fareDown', { diff: formatCurrency(diff) })
+              : t('track.fareSame')) +
+          '\n' + t('track.riderNotified'),
       );
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setSavingAddress(false);
     }
@@ -368,22 +370,22 @@ const LiveTrackingScreen = () => {
       const updated = await rateOrder(orderId, pendingStars);
       setOrder(updated);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setRatingSubmitting(false);
     }
   };
 
   const handleCancel = async () => {
-    Alert.alert('Cancel Order', 'Are you sure you want to cancel?', [
-      { text: 'Keep Order', style: 'cancel' },
+    Alert.alert(t('track.cancelOrder'), t('track.cancelConfirm'), [
+      { text: t('track.keepOrder'), style: 'cancel' },
       {
-        text: 'Cancel Order', style: 'destructive', onPress: async () => {
+        text: t('track.cancelOrder'), style: 'destructive', onPress: async () => {
           try {
             setLoading(true);
             const updated = await cancelOrder(orderId, 'Cancelled by customer');
             setOrder(updated);
-          } catch (e: any) { Alert.alert('Error', e.message); }
+          } catch (e: any) { Alert.alert(t('common.error'), e.message); }
           finally { setLoading(false); }
         },
       },
@@ -438,7 +440,9 @@ const LiveTrackingScreen = () => {
     : null;
 
   const formatDuration = (min: number) =>
-    min < 60 ? `${Math.round(min)} min` : `${Math.floor(min / 60)}h ${Math.round(min % 60)}min`;
+    min < 60
+      ? t('unit.min', { n: Math.round(min) })
+      : t('unit.hMin', { h: Math.floor(min / 60), m: Math.round(min % 60) });
 
   return (
     <View style={styles.container}>
@@ -458,17 +462,17 @@ const LiveTrackingScreen = () => {
         )}
 
         {pickupLatLng && (
-          <Marker coordinate={pickupLatLng} title="Pickup" anchor={{ x: 0.5, y: 1 }}>
+          <Marker coordinate={pickupLatLng} title={t('fare.pickup')} anchor={{ x: 0.5, y: 1 }}>
             <PlacePin color={COLORS.success} icon="📦" />
           </Marker>
         )}
         {deliveryLatLng && (
-          <Marker coordinate={deliveryLatLng} title="Delivery" anchor={{ x: 0.5, y: 1 }}>
+          <Marker coordinate={deliveryLatLng} title={t('fare.delivery')} anchor={{ x: 0.5, y: 1 }}>
             <PlacePin color={COLORS.primary} icon="🏁" />
           </Marker>
         )}
         {hasRider && riderAnim.current && (
-          <MarkerAnimated coordinate={riderAnim.current as any} anchor={{ x: 0.5, y: 0.5 }} title="Rider">
+          <MarkerAnimated coordinate={riderAnim.current as any} anchor={{ x: 0.5, y: 0.5 }} title={t('track.rider')}>
             <LiveRiderMarker />
           </MarkerAnimated>
         )}
@@ -490,12 +494,12 @@ const LiveTrackingScreen = () => {
           <Text style={styles.etaIcon}>🏍️</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.etaTitle}>
-              {order.status === 'picked_up' ? 'Parcel aa raha hai' : 'Rider aa raha hai'}
+              {order.status === 'picked_up' ? t('track.parcelComing') : t('track.riderComing')}
             </Text>
             <Text style={styles.etaSub}>
               {routeDuration !== null ? formatDuration(routeDuration) : ''}
               {routeDuration !== null && routeDistance !== null ? ' · ' : ''}
-              {routeDistance !== null ? `${routeDistance.toFixed(1)} km door` : ''}
+              {routeDistance !== null ? t('track.kmAway', { km: routeDistance.toFixed(1) }) : ''}
             </Text>
           </View>
         </View>
@@ -529,8 +533,8 @@ const LiveTrackingScreen = () => {
             {/* Live delivery progress stepper */}
             {!cancelled && (
               <View style={styles.stepper}>
-                {['Placed', 'Accepted', 'Picked', 'Delivered'].map((label, i) => (
-                  <React.Fragment key={label}>
+                {[t('track.stepPlaced'), t('track.stepAccepted'), t('track.stepPicked'), t('track.stepDelivered')].map((label, i) => (
+                  <React.Fragment key={i}>
                     <View style={styles.stepItem}>
                       <View style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]}>
                         {i < stepIndex
@@ -548,32 +552,32 @@ const LiveTrackingScreen = () => {
             {/* Rider dhoondhne ka progress bar (ease-out animation) */}
             {searching && (
               <View style={styles.searchCard}>
-                <Text style={styles.searchTitle}>🔍 Rider dhoondh rahe hain…</Text>
+                <Text style={styles.searchTitle}>{t('track.searching')}</Text>
                 <Text style={styles.searchSub}>
                   {nearbyRiders.length > 0
-                    ? `${nearbyRiders.length} rider aas-paas hain (5 km ke andar)`
-                    : 'Aas-paas ke riders ko request bheji ja rahi hai'}
+                    ? t('track.nearbyCount', { n: nearbyRiders.length })
+                    : t('track.sendingRequest')}
                 </Text>
                 <SearchWaveBar progress={searchProgress} />
 
                 {/* Tier line: har 1:30 me daayra badhta hai — 1km green, 3km yellow, 5km red */}
                 <View style={styles.tierRow}>
-                  {SEARCH_TIERS.map((t, i) => {
+                  {SEARCH_TIERS.map((tier, i) => {
                     const pct = i < tierIdx ? 1
                       : i > tierIdx ? 0
                       : Math.min(1, (searchElapsed - i * TIER_MS) / TIER_MS);
                     return (
-                      <View key={t.km} style={styles.tierSeg}>
+                      <View key={tier.km} style={styles.tierSeg}>
                         <View style={styles.tierTrack}>
-                          <View style={[styles.tierFill, { width: `${pct * 100}%`, backgroundColor: t.color }]} />
+                          <View style={[styles.tierFill, { width: `${pct * 100}%`, backgroundColor: tier.color }]} />
                         </View>
-                        <Text style={[styles.tierLabel, i === tierIdx && { color: t.color }]}>{t.km} km</Text>
+                        <Text style={[styles.tierLabel, i === tierIdx && { color: tier.color }]}>{tier.km} km</Text>
                       </View>
                     );
                   })}
                 </View>
                 <Text style={[styles.tierHint, { color: SEARCH_TIERS[tierIdx].color }]}>
-                  Abhi {SEARCH_TIERS[tierIdx].km} km ke daayre me rider dhoondh rahe hain
+                  {t('track.tierHint', { km: SEARCH_TIERS[tierIdx].km })}
                 </Text>
               </View>
             )}
@@ -582,13 +586,12 @@ const LiveTrackingScreen = () => {
             {noRider && (
               <View style={styles.noRiderCard}>
                 <Text style={styles.noRiderIcon}>😕</Text>
-                <Text style={styles.noRiderTitle}>Abhi koi rider nahi mil paya</Text>
+                <Text style={styles.noRiderTitle}>{t('track.noRider')}</Text>
                 <Text style={styles.noRiderSub}>
-                  Aas-paas ke sabhi riders abhi busy lag rahe hain. "Order Again" dabayein —
-                  hum dobara riders dhoondhna shuru kar denge. Aapka order safe hai.
+                  {t('track.noRiderSub')}
                 </Text>
                 <Button
-                  title="Order Again"
+                  title={t('track.orderAgain')}
                   onPress={handleOrderAgain}
                   loading={retrying}
                   style={{ marginTop: 12 }}
@@ -605,9 +608,9 @@ const LiveTrackingScreen = () => {
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.riderName} numberOfLines={1}>{rider.name || 'Your Rider'}</Text>
+                  <Text style={styles.riderName} numberOfLines={1}>{rider.name || t('track.yourRider')}</Text>
                   <Text style={styles.riderMeta} numberOfLines={1}>
-                    {rider.vehicleType || 'Bike'}
+                    {rider.vehicleType || t('track.bike')}
                     {rider.vehicleNumber ? ` · ${rider.vehicleNumber}` : ''}
                     {typeof rider.rating === 'number' ? `  ⭐ ${rider.rating.toFixed(1)}` : ''}
                   </Text>
@@ -642,7 +645,7 @@ const LiveTrackingScreen = () => {
                     onPress={() => setEditingAddress(true)}
                     activeOpacity={0.8}>
                     <Text style={styles.editAddrIcon}>✏️</Text>
-                    <Text style={styles.editAddrText}>Edit</Text>
+                    <Text style={styles.editAddrText}>{t('common.edit')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -650,24 +653,24 @@ const LiveTrackingScreen = () => {
 
             {order.status === 'accepted' && order.pickupOtp && (
               <View style={styles.otpCard}>
-                <Text style={styles.otpCardLabel}>🔑 Pickup OTP — Rider ko batao</Text>
+                <Text style={styles.otpCardLabel}>{t('track.pickupOtp')}</Text>
                 <Text style={styles.otpValue}>{order.pickupOtp}</Text>
-                <Text style={styles.otpHintText}>Rider pickup location pe pohonchne par yeh OTP maangega</Text>
+                <Text style={styles.otpHintText}>{t('track.pickupOtpHint')}</Text>
               </View>
             )}
             {order.status === 'picked_up' && order.deliveryOtp && (
               <View style={[styles.otpCard, { backgroundColor: COLORS.secondaryBg, borderLeftColor: COLORS.secondary }]}>
-                <Text style={[styles.otpCardLabel, { color: COLORS.secondary }]}>🔑 Delivery OTP — Rider ko batao</Text>
+                <Text style={[styles.otpCardLabel, { color: COLORS.secondary }]}>{t('track.deliveryOtp')}</Text>
                 <Text style={[styles.otpValue, { color: COLORS.secondary }]}>{order.deliveryOtp}</Text>
-                <Text style={[styles.otpHintText, { color: COLORS.secondary + 'AA' }]}>Rider delivery location pe pohonchne par yeh OTP maangega</Text>
+                <Text style={[styles.otpHintText, { color: COLORS.secondary + 'AA' }]}>{t('track.deliveryOtpHint')}</Text>
               </View>
             )}
 
             {order.status === 'delivered' && (
               <View style={styles.deliveredBanner}>
                 <Text style={styles.deliveredIcon}>✅</Text>
-                <Text style={styles.deliveredTitle}>Parcel Delivered!</Text>
-                <Text style={styles.deliveredSub}>Your parcel was delivered successfully</Text>
+                <Text style={styles.deliveredTitle}>{t('track.delivered')}</Text>
+                <Text style={styles.deliveredSub}>{t('track.deliveredSub')}</Text>
               </View>
             )}
 
@@ -675,7 +678,7 @@ const LiveTrackingScreen = () => {
             {order.status === 'delivered' && (
               order.rating ? (
                 <View style={styles.ratingCard}>
-                  <Text style={styles.ratingTitle}>Aapki Rating</Text>
+                  <Text style={styles.ratingTitle}>{t('track.yourRating')}</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map(i => (
                       <Text
@@ -686,13 +689,13 @@ const LiveTrackingScreen = () => {
                     ))}
                   </View>
                   <Text style={styles.ratingThanks}>
-                    Shukriya! Aapka feedback rider tak pahunch gaya 🙏
+                    {t('track.ratingThanks')}
                   </Text>
                 </View>
               ) : (
                 <View style={styles.ratingCard}>
                   <Text style={styles.ratingTitle}>
-                    {rider?.name ? `${rider.name} ki service kaisi rahi?` : 'Rider ki service kaisi rahi?'}
+                    {rider?.name ? t('track.howWasNamed', { name: rider.name }) : t('track.howWas')}
                   </Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map(i => (
@@ -705,11 +708,11 @@ const LiveTrackingScreen = () => {
                   </View>
                   {pendingStars > 0 && (
                     <Text style={styles.ratingHint}>
-                      {['', 'Bahut kharab 😞', 'Kharab 😕', 'Theek-thaak 🙂', 'Achha 😊', 'Shaandar! 🤩'][pendingStars]}
+                      {['', t('track.star1'), t('track.star2'), t('track.star3'), t('track.star4'), t('track.star5')][pendingStars]}
                     </Text>
                   )}
                   <Button
-                    title="Rating Submit Karo"
+                    title={t('track.submitRating')}
                     icon="⭐"
                     onPress={handleRate}
                     loading={ratingSubmitting}
@@ -722,7 +725,7 @@ const LiveTrackingScreen = () => {
 
             {['pending', 'accepted'].includes(order.status) && (
               <Button
-                title="Cancel Order"
+                title={t('track.cancelOrder')}
                 onPress={handleCancel}
                 variant="danger"
                 loading={loading}
@@ -732,7 +735,7 @@ const LiveTrackingScreen = () => {
           </ScrollView>
         ) : (
           <View style={styles.loadingWrap}>
-            <Text style={styles.loadingText}>Loading order details…</Text>
+            <Text style={styles.loadingText}>{t('track.loading')}</Text>
           </View>
         )}
       </SafeAreaView>
@@ -744,9 +747,9 @@ const LiveTrackingScreen = () => {
           <SafeAreaView edges={['top']} style={{ flex: 1 }}>
             <View style={styles.editHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.editTitle}>Delivery Address Badlo</Text>
+                <Text style={styles.editTitle}>{t('track.editTitle')}</Text>
                 <Text style={styles.editSub}>
-                  Naya address pin karo — fare nayi doori ke hisaab se adjust hoga
+                  {t('track.editSub')}
                 </Text>
               </View>
               <TouchableOpacity
@@ -758,19 +761,18 @@ const LiveTrackingScreen = () => {
             </View>
             <View style={styles.editBody}>
               <AddressSearchInput
-                label="Naya Delivery Address"
-                placeholder="Search new delivery address"
+                label={t('track.newAddress')}
+                placeholder={t('track.searchNew')}
                 leftIcon="🏁"
                 biasCoords={order.delivery.coordinates}
                 onSelect={handleDeliveryEdited}
               />
               {savingAddress && (
-                <Text style={styles.editSaving}>Naya address save ho raha hai…</Text>
+                <Text style={styles.editSaving}>{t('track.saving')}</Text>
               )}
               <View style={styles.editNote}>
                 <Text style={styles.editNoteText}>
-                  💡 Doori badhegi to fare badhega, kam hogi to fare bhi kam ho
-                  jayega. Rider ko naya address turant mil jayega.
+                  {t('track.editNote')}
                 </Text>
               </View>
             </View>
